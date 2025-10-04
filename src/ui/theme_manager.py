@@ -12,7 +12,7 @@ from pathlib import Path
 class ModernTheme:
     """Modern theme configuration and styling"""
     
-    # Default modern color palette
+    # Default modern color palette (Light theme)
     DEFAULT_COLORS = {
         "primary": "#667eea",
         "primary_hover": "#5a6fd8", 
@@ -30,6 +30,26 @@ class ModernTheme:
         "warning": "#f39c12",
         "error": "#e74c3c",
         "glow": "#FFD700"
+    }
+    
+    # Dark theme color palette
+    DARK_COLORS = {
+        "primary": "#7c3aed",
+        "primary_hover": "#8b5cf6", 
+        "secondary": "#10b981",
+        "secondary_hover": "#34d399",
+        "accent": "#f472b6",
+        "accent_hover": "#ec4899",
+        "background": "#0f172a",
+        "surface": "#1e293b",
+        "text_primary": "#f1f5f9",
+        "text_secondary": "#cbd5e1",
+        "text_muted": "#94a3b8",
+        "border": "#334155",
+        "success": "#22c55e",
+        "warning": "#f59e0b",
+        "error": "#ef4444",
+        "glow": "#fbbf24"
     }
     
     # Modern fonts
@@ -51,19 +71,27 @@ class ModernTheme:
     
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
+        self.is_dark_mode = self._get_theme_mode()
         self.colors = self._load_colors()
         self.fonts = self._load_fonts()
         
+    def _get_theme_mode(self) -> bool:
+        """Get current theme mode from config"""
+        ui_config = self.config.get("ui", {})
+        return ui_config.get("dark_mode", False)
+    
     def _load_colors(self) -> Dict[str, str]:
-        """Load colors from config or use defaults"""
+        """Load colors from config or use defaults based on theme mode"""
         ui_config = self.config.get("ui", {})
         color_scheme = ui_config.get("color_scheme", {})
         
-        # Merge with defaults
-        colors = self.DEFAULT_COLORS.copy()
-        colors.update(color_scheme)
+        # Choose base colors based on theme mode
+        base_colors = self.DARK_COLORS.copy() if self.is_dark_mode else self.DEFAULT_COLORS.copy()
         
-        return colors
+        # Merge with custom color scheme
+        base_colors.update(color_scheme)
+        
+        return base_colors
     
     def _load_fonts(self) -> Dict[str, Tuple]:
         """Load fonts from config or use defaults"""
@@ -269,14 +297,31 @@ class ModernTheme:
         
         widget.bind("<Enter>", show_tooltip)
         widget.bind("<Leave>", hide_tooltip)
+    
+    def toggle_dark_mode(self):
+        """Toggle between dark and light mode"""
+        self.is_dark_mode = not self.is_dark_mode
+        self.colors = self._load_colors()
+        return self.is_dark_mode
+    
+    def set_dark_mode(self, enabled: bool):
+        """Explicitly set dark mode on or off"""
+        self.is_dark_mode = enabled
+        self.colors = self._load_colors()
+    
+    def is_dark_theme(self) -> bool:
+        """Check if current theme is dark mode"""
+        return self.is_dark_mode
 
 
 class StyleManager:
     """Manages styling across the application"""
     
     def __init__(self, config_path: str = None):
+        self.config_path = config_path
         self.config = self._load_config(config_path)
         self.theme = ModernTheme(self.config)
+        self._theme_change_callbacks = []
         
     def _load_config(self, config_path: str = None) -> Dict[str, Any]:
         """Load configuration from file"""
@@ -301,6 +346,68 @@ class StyleManager:
     def get_theme(self) -> ModernTheme:
         """Get the current theme"""
         return self.theme
+    
+    def toggle_dark_mode(self) -> bool:
+        """Toggle dark mode and update config"""
+        is_dark = self.theme.toggle_dark_mode()
+        self._update_config_theme(is_dark)
+        self._notify_theme_change()
+        return is_dark
+    
+    def set_dark_mode(self, enabled: bool):
+        """Set dark mode and update config"""
+        self.theme.set_dark_mode(enabled)
+        self._update_config_theme(enabled)
+        self._notify_theme_change()
+    
+    def _update_config_theme(self, is_dark: bool):
+        """Update config file with new theme setting"""
+        try:
+            if "ui" not in self.config:
+                self.config["ui"] = {}
+            
+            self.config["ui"]["dark_mode"] = is_dark
+            
+            # Clear custom color_scheme to use full theme colors
+            # Users can still manually customize colors if desired
+            if "color_scheme" in self.config["ui"]:
+                # Remove the color_scheme to use default theme colors
+                # This gives users the full dark/light mode experience
+                del self.config["ui"]["color_scheme"]
+            
+            # Update the theme's config and reload colors
+            self.theme.config = self.config
+            self.theme.is_dark_mode = is_dark
+            self.theme.colors = self.theme._load_colors()
+            
+            # Save to config file if we have a path
+            config_file = self.config_path or self._get_default_config_path()
+            if config_file:
+                import json
+                with open(config_file, 'w') as f:
+                    json.dump(self.config, f, indent=2)
+        except Exception as e:
+            print(f"Failed to save theme config: {e}")
+    
+    def _get_default_config_path(self) -> str:
+        """Get default config file path"""
+        try:
+            from pathlib import Path
+            return str(Path(__file__).parent.parent.parent / "config" / "settings.json")
+        except:
+            return None
+    
+    def add_theme_change_callback(self, callback):
+        """Add callback to be called when theme changes"""
+        self._theme_change_callbacks.append(callback)
+    
+    def _notify_theme_change(self):
+        """Notify all callbacks about theme change"""
+        for callback in self._theme_change_callbacks:
+            try:
+                callback(self.theme)
+            except Exception as e:
+                print(f"Theme change callback error: {e}")
     
     def apply_global_styles(self, root: tk.Tk):
         """Apply global styles to the application"""

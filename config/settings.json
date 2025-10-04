@@ -7,8 +7,8 @@
       "height": 270
     },
     "position": {
-      "x": 750,
-      "y": 320
+      "x": 772,
+      "y": 305
     },
     "animations": {
       "idle": "assets/pet/idle.gif",
@@ -57,13 +57,7 @@
     "always_on_top": true,
     "click_through": false,
     "theme": "modern",
-    "color_scheme": {
-      "primary": "#667eea",
-      "secondary": "#48c78e",
-      "accent": "#FF69B4",
-      "background": "#f8f9fa",
-      "text": "#2c3e50"
-    },
+    "dark_mode": true,
     "effects": {
       "hover_animations": true,
       "fade_transitions": true,

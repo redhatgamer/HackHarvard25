@@ -27,13 +27,23 @@ except ImportError:
 
 # Import modern UI components
 try:
-    from src.ui.modern_components import ModernPetWidget, ModernChatWindow, ModernContextMenu, ModernSpeechBubble
+    from src.ui.modern_components import (ModernPetWidget, ModernChatWindow, 
+                                        ModernContextMenu, ModernSpeechBubble, 
+                                        DarkModeToggle)
 except ImportError:
     # Fallback if modern components aren't available
     ModernPetWidget = None
     ModernChatWindow = None
     ModernContextMenu = None
     ModernSpeechBubble = None
+    DarkModeToggle = None
+
+# Import theme manager
+try:
+    from src.ui.theme_manager import get_style_manager, get_theme
+except ImportError:
+    get_style_manager = None
+    get_theme = None
 
 class PetManager:
     """Main manager for the virtual pet assistant"""
@@ -63,7 +73,13 @@ class PetManager:
         self.pet_window = None
         self.chat_window = None
         self.speech_bubble = None
+        self.dark_mode_toggle = None
         self.is_running = False
+        
+        # Theme management
+        self.style_manager = get_style_manager() if get_style_manager else None
+        if self.style_manager:
+            self.style_manager.add_theme_change_callback(self._on_theme_change)
         
         # State
         self.current_context = None
@@ -415,6 +431,11 @@ class PetManager:
         """Handle right click - show modern context menu"""
         if ModernContextMenu:
             # Use modern context menu
+            # Determine current theme for toggle text
+            current_theme = self.style_manager.get_theme() if self.style_manager else None
+            is_dark = current_theme.is_dark_theme() if current_theme else False
+            theme_text = "☀️ Switch to Light Mode" if is_dark else "🌙 Switch to Dark Mode"
+            
             menu_options = [
                 ("💬 Open Full Chat Window", lambda: asyncio.create_task(self._open_chat_interface())),
                 ("💭 Say Something", lambda: asyncio.create_task(self._show_pet_message())),
@@ -423,13 +444,14 @@ class PetManager:
                 ("🎯 Fix Current File", lambda: asyncio.create_task(self._fix_current_vscode_file())),
                 "---",  # Separator - Code Generation
                 ("🛠️ Generate Code", lambda: asyncio.create_task(self._show_code_generation_menu())),
-                ("� Analyze Code", lambda: asyncio.create_task(self._analyze_code_interface())),
+                ("📝 Analyze Code", lambda: asyncio.create_task(self._analyze_code_interface())),
                 ("🔧 Fix Code Errors", lambda: asyncio.create_task(self._fix_code_interface())),
                 ("🧪 Generate Tests", lambda: asyncio.create_task(self._generate_tests_interface())),
                 "---",  # Separator - Appearance
-                ("�🔍 Make Bigger", self._resize_bigger),
+                ("🔍 Make Bigger", self._resize_bigger),
                 ("🔎 Make Smaller", self._resize_smaller),
                 ("📏 Reset Size", self._reset_pet_size),
+                (theme_text, self._toggle_dark_mode),
                 "---",  # Separator - Settings
                 ("⚙️ Settings", self._open_settings),
                 ("❌ Exit", self._exit_application)
@@ -1366,3 +1388,81 @@ class PetManager:
             self.logger.error(f"Error showing speech bubble: {e}")
             # Ultimate fallback - just log the message
             self.logger.info(f"Pixie says: {message}")
+    
+    def _toggle_dark_mode(self):
+        """Toggle between dark and light mode"""
+        try:
+            if self.style_manager:
+                is_dark = self.style_manager.toggle_dark_mode()
+                theme_name = "Dark Mode" if is_dark else "Light Mode"
+                asyncio.create_task(self._show_speech_bubble(f"Switched to {theme_name}! ✨", duration=2000))
+            else:
+                asyncio.create_task(self._show_speech_bubble("Theme switching not available 😿", duration=2000))
+        except Exception as e:
+            self.logger.error(f"Error toggling dark mode: {e}")
+    
+    def _on_theme_change(self, new_theme):
+        """Handle theme change event"""
+        try:
+            # Update all UI components to use new theme
+            if self.chat_window and hasattr(self.chat_window, 'window'):
+                self._apply_theme_to_chat_window(new_theme)
+            
+            if self.pet_window:
+                self._apply_theme_to_pet_window(new_theme)
+            
+            # Update any other UI elements that need theme updates
+            self.logger.info(f"Applied {'dark' if new_theme.is_dark_theme() else 'light'} theme to UI")
+            
+        except Exception as e:
+            self.logger.error(f"Error applying theme change: {e}")
+    
+    def _apply_theme_to_chat_window(self, theme):
+        """Apply theme colors to chat window"""
+        try:
+            if not (self.chat_window and hasattr(self.chat_window, 'window')):
+                return
+                
+            bg_color = theme.get_color("background")
+            surface_color = theme.get_color("surface")
+            text_color = theme.get_color("text_primary")
+            
+            # Update window background
+            self.chat_window.window.configure(bg=bg_color)
+            
+            # Update chat display
+            if hasattr(self.chat_window, 'chat_display'):
+                self.chat_window.chat_display.configure(
+                    bg=surface_color,
+                    fg=text_color,
+                    insertbackground=theme.get_color("primary")
+                )
+            
+            # Update input area
+            if hasattr(self.chat_window, 'chat_input'):
+                self.chat_window.chat_input.configure(
+                    bg=surface_color,
+                    fg=text_color,
+                    insertbackground=theme.get_color("primary")
+                )
+                
+        except Exception as e:
+            self.logger.error(f"Error applying theme to chat window: {e}")
+    
+    def _apply_theme_to_pet_window(self, theme):
+        """Apply theme colors to pet window"""
+        try:
+            if not self.pet_window:
+                return
+                
+            # The pet window uses transparency, so we mainly need to update
+            # any text or overlay elements to match the theme
+            # The pet graphics themselves can adapt based on theme colors
+            
+            if hasattr(self, 'pet_widget') and self.pet_widget:
+                # Let the pet widget handle its own theme updates
+                # This could be expanded to change pet colors based on theme
+                pass
+                
+        except Exception as e:
+            self.logger.error(f"Error applying theme to pet window: {e}")

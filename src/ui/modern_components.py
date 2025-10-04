@@ -485,6 +485,13 @@ class ModernSpeechBubble:
         self.typing_index = 0
         self.is_visible = False
         
+        # Get theme for styling
+        try:
+            from src.ui.theme_manager import get_theme
+            self.theme = get_theme()
+        except ImportError:
+            self.theme = None
+        
         # Animation state
         self.fade_alpha = 0.0
         self.target_alpha = 0.0
@@ -571,11 +578,17 @@ class ModernSpeechBubble:
         bubble_y = 10
         corner_radius = 15
         
+        # Get theme colors for bubble
+        surface_color = self.theme.get_color("surface") if self.theme else '#ffffff'
+        border_color = self.theme.get_color("border") if self.theme else '#e1e5e9'
+        text_color = self.theme.get_color("text_primary") if self.theme else '#2c3e50'
+        shadow_color = '#404040' if (self.theme and self.theme.is_dark_theme()) else '#d0d0d0'
+        
         # Create rounded rectangle for bubble
         self._create_rounded_rectangle(
             bubble_x, bubble_y, 
             bubble_x + bubble_width, bubble_y + bubble_height,
-            corner_radius, fill='#ffffff', outline='#e1e5e9', width=2
+            corner_radius, fill=surface_color, outline=border_color, width=2
         )
         
         # Add subtle shadow effect
@@ -583,7 +596,7 @@ class ModernSpeechBubble:
         self._create_rounded_rectangle(
             bubble_x + shadow_offset, bubble_y + shadow_offset,
             bubble_x + bubble_width + shadow_offset, bubble_y + bubble_height + shadow_offset,
-            corner_radius, fill='#d0d0d0', outline='', stipple='gray25'
+            corner_radius, fill=shadow_color, outline='', stipple='gray25'
         )
         
         # Draw pointer/tail pointing to pet
@@ -592,12 +605,12 @@ class ModernSpeechBubble:
             bubble_x + 20, bubble_y + bubble_height + 15,
             bubble_x + 45, bubble_y + bubble_height
         ]
-        self.canvas.create_polygon(tail_points, fill='#ffffff', outline='#e1e5e9', width=2)
+        self.canvas.create_polygon(tail_points, fill=surface_color, outline=border_color, width=2)
         
         # Create text area
         self.text_id = self.canvas.create_text(
             bubble_x + bubble_width // 2, bubble_y + bubble_height // 2,
-            text="", font=("Segoe UI", 10), fill='#2c3e50',
+            text="", font=("Segoe UI", 10), fill=text_color,
             width=bubble_width - 20, justify='left', anchor='center'
         )
     
@@ -790,6 +803,14 @@ class ModernChatWindow:
         self.window = None
         self.chat_display = None
         self.chat_input = None
+        
+        # Get theme for styling
+        try:
+            from src.ui.theme_manager import get_theme
+            self.theme = get_theme()
+        except ImportError:
+            self.theme = None
+            
         self.setup_window(title)
         
     def setup_window(self, title: str):
@@ -798,8 +819,9 @@ class ModernChatWindow:
         self.window.title(title)
         self.window.geometry("450x600")
         
-        # Modern window styling
-        self.window.configure(bg='#f8f9fa')
+        # Modern window styling with theme support
+        bg_color = self.theme.get_color("background") if self.theme else '#f8f9fa'
+        self.window.configure(bg=bg_color)
         
         # Remove default window decorations for custom styling
         # self.window.overrideredirect(True)  # Uncomment for frameless
@@ -821,12 +843,13 @@ class ModernChatWindow:
         title_frame.pack(fill='x')
         title_frame.pack_propagate(False)
         
-        # Title text
+        # Title text with theme colors
+        primary_color = self.theme.get_color("primary") if self.theme else '#667eea'
         title_label = tk.Label(
             title_frame,
             text="💬 Chat with Pixie",
             font=('Segoe UI', 12, 'bold'),
-            bg='#667eea',
+            bg=primary_color,
             fg='white'
         )
         title_label.pack(side='left', padx=15, pady=10)
@@ -856,20 +879,24 @@ class ModernChatWindow:
         chat_container = tk.Frame(self.window, bg='#f8f9fa')
         chat_container.pack(fill='both', expand=True, padx=20, pady=(20, 10))
         
-        # Chat display with modern styling
+        # Chat display with modern styling and theme support
+        surface_color = self.theme.get_color("surface") if self.theme else 'white'
+        text_color = self.theme.get_color("text_primary") if self.theme else '#2c3e50'
+        primary_color = self.theme.get_color("primary") if self.theme else '#667eea'
+        
         self.chat_display = tk.Text(
             chat_container,
             wrap='word',
             state='disabled',
-            bg='white',
-            fg='#2c3e50',
+            bg=surface_color,
+            fg=text_color,
             font=('Segoe UI', 10),
             bd=0,
             padx=15,
             pady=15,
             relief='flat',
             selectbackground='#e3f2fd',
-            insertbackground='#667eea'
+            insertbackground=primary_color
         )
         
         # Custom scrollbar
@@ -884,38 +911,47 @@ class ModernChatWindow:
     
     def _create_input_area(self):
         """Create modern input area"""
-        input_container = tk.Frame(self.window, bg='#f8f9fa')
+        # Get theme colors
+        bg_color = self.theme.get_color("background") if self.theme else '#f8f9fa'
+        surface_color = self.theme.get_color("surface") if self.theme else 'white'
+        text_color = self.theme.get_color("text_primary") if self.theme else '#2c3e50'
+        primary_color = self.theme.get_color("primary") if self.theme else '#667eea'
+        
+        input_container = tk.Frame(self.window, bg=bg_color)
         input_container.pack(fill='x', padx=20, pady=(0, 20))
         
         # Input text area
-        input_frame = tk.Frame(input_container, bg='white', relief='flat', bd=1)
+        input_frame = tk.Frame(input_container, bg=surface_color, relief='flat', bd=1)
         input_frame.pack(fill='x', pady=(0, 10))
         
         self.chat_input = tk.Text(
             input_frame,
             height=3,
             wrap='word',
-            bg='white',
-            fg='#2c3e50',
+            bg=surface_color,
+            fg=text_color,
             font=('Segoe UI', 10),
             bd=0,
             padx=15,
             pady=10,
             relief='flat',
-            insertbackground='#667eea'
+            insertbackground=primary_color
         )
         self.chat_input.pack(fill='both', expand=True)
         
         # Buttons frame
-        button_frame = tk.Frame(input_container, bg='#f8f9fa')
+        button_frame = tk.Frame(input_container, bg=bg_color)
         button_frame.pack(fill='x')
+        
+        # Get button colors
+        secondary_color = self.theme.get_color("secondary") if self.theme else '#48c78e'
         
         # Modern send button
         send_button = tk.Button(
             button_frame,
             text="Send Message",
             font=('Segoe UI', 10, 'bold'),
-            bg='#667eea',
+            bg=primary_color,
             fg='white',
             bd=0,
             padx=20,
@@ -930,7 +966,7 @@ class ModernChatWindow:
             button_frame,
             text="📸 Analyze Screen",
             font=('Segoe UI', 10),
-            bg='#48c78e',
+            bg=secondary_color,
             fg='white',
             bd=0,
             padx=20,
@@ -940,9 +976,12 @@ class ModernChatWindow:
         )
         analyze_button.pack(side='right')
         
-        # Hover effects
-        self._add_button_hover_effects(send_button, '#5a6fd8', '#667eea')
-        self._add_button_hover_effects(analyze_button, '#3ec281', '#48c78e')
+        # Hover effects with theme colors
+        primary_hover = self.theme.get_color("primary_hover") if self.theme else '#5a6fd8'
+        secondary_hover = self.theme.get_color("secondary_hover") if self.theme else '#3ec281'
+        
+        self._add_button_hover_effects(send_button, primary_hover, primary_color)
+        self._add_button_hover_effects(analyze_button, secondary_hover, secondary_color)
         
         return send_button, analyze_button
     
@@ -1013,6 +1052,13 @@ class ModernContextMenu:
         self.parent = parent
         self.menu_window = None
         
+        # Get theme for styling
+        try:
+            from src.ui.theme_manager import get_theme
+            self.theme = get_theme()
+        except ImportError:
+            self.theme = None
+        
     def show(self, x: int, y: int, options: list):
         """Show modern context menu at position"""
         if self.menu_window:
@@ -1026,21 +1072,27 @@ class ModernContextMenu:
         # Position menu
         self.menu_window.geometry(f"+{x}+{y}")
         
-        # Create menu frame
+        # Create menu frame with theme colors
+        surface_color = self.theme.get_color("surface") if self.theme else 'white'
+        border_color = self.theme.get_color("border") if self.theme else '#e0e6ed'
+        
         menu_frame = tk.Frame(
             self.menu_window,
-            bg='white',
+            bg=surface_color,
             relief='flat',
             bd=1,
             highlightthickness=1,
-            highlightcolor='#e0e6ed'
+            highlightcolor=border_color
         )
         menu_frame.pack(fill='both', expand=True)
         
-        # Add options
+        # Add options with theme colors
+        text_color = self.theme.get_color("text_primary") if self.theme else '#2c3e50'
+        hover_color = self.theme.get_color("border") if self.theme else '#f1f3f4'
+        
         for option in options:
             if option == "---":  # Separator
-                separator = tk.Frame(menu_frame, height=1, bg='#e0e6ed')
+                separator = tk.Frame(menu_frame, height=1, bg=border_color)
                 separator.pack(fill='x', padx=10, pady=2)
             else:
                 label, command = option
@@ -1048,8 +1100,8 @@ class ModernContextMenu:
                     menu_frame,
                     text=label,
                     font=('Segoe UI', 10),
-                    bg='white',
-                    fg='#2c3e50',
+                    bg=surface_color,
+                    fg=text_color,
                     bd=0,
                     padx=20,
                     pady=8,
@@ -1060,9 +1112,9 @@ class ModernContextMenu:
                 )
                 btn.pack(fill='x')
                 
-                # Hover effects
-                def on_enter(e, button=btn): button.configure(bg='#f1f3f4')
-                def on_leave(e, button=btn): button.configure(bg='white')
+                # Hover effects with theme colors
+                def on_enter(e, button=btn): button.configure(bg=hover_color)
+                def on_leave(e, button=btn): button.configure(bg=surface_color)
                 btn.bind("<Enter>", on_enter)
                 btn.bind("<Leave>", on_leave)
         
@@ -1096,3 +1148,162 @@ class ModernContextMenu:
         if self.menu_window:
             self.menu_window.destroy()
             self.menu_window = None
+
+
+class DarkModeToggle:
+    """Modern dark mode toggle switch component"""
+    
+    def __init__(self, parent, callback=None, initial_state=False):
+        self.parent = parent
+        self.callback = callback
+        self.is_dark = initial_state
+        self.toggle_canvas = None
+        self.animation_timer = None
+        self.switch_x = 0
+        self.target_x = 0
+        self.animation_speed = 2
+        
+        self._setup_toggle()
+        
+    def _setup_toggle(self):
+        """Setup the dark mode toggle switch"""
+        # Container frame
+        self.container = tk.Frame(
+            self.parent,
+            bg='transparent' if hasattr(self.parent, 'winfo_rgb') else '#f8f9fa'
+        )
+        
+        # Toggle switch canvas
+        self.toggle_canvas = tk.Canvas(
+            self.container,
+            width=60,
+            height=30,
+            highlightthickness=0,
+            bd=0,
+            bg='transparent' if hasattr(self.parent, 'winfo_rgb') else '#f8f9fa'
+        )
+        self.toggle_canvas.pack(side='left')
+        
+        # Label
+        self.label = tk.Label(
+            self.container,
+            text="🌙 Dark Mode",
+            font=('Segoe UI', 10),
+            bg='transparent' if hasattr(self.parent, 'winfo_rgb') else '#f8f9fa',
+            fg='#2c3e50'
+        )
+        self.label.pack(side='left', padx=(10, 0))
+        
+        # Bind click events
+        self.toggle_canvas.bind("<Button-1>", self._on_toggle_click)
+        self.label.bind("<Button-1>", self._on_toggle_click)
+        
+        # Initial position
+        self.switch_x = 30 if self.is_dark else 5
+        self.target_x = self.switch_x
+        
+        self._draw_toggle()
+        
+    def _draw_toggle(self):
+        """Draw the toggle switch"""
+        self.toggle_canvas.delete("all")
+        
+        # Background track
+        track_color = "#4A90E2" if self.is_dark else "#E0E6ED"
+        self.toggle_canvas.create_rounded_rectangle(
+            5, 10, 55, 20, 5, fill=track_color, outline=""
+        )
+        
+        # Switch circle
+        circle_color = "#FFFFFF"
+        shadow_color = "#00000020"
+        
+        # Draw shadow
+        self.toggle_canvas.create_oval(
+            self.switch_x + 1, 6, self.switch_x + 19, 24,
+            fill=shadow_color, outline=""
+        )
+        
+        # Draw main circle
+        self.toggle_canvas.create_oval(
+            self.switch_x, 5, self.switch_x + 18, 23,
+            fill=circle_color, outline="#D0D0D0", width=1
+        )
+        
+        # Add icon in the center
+        icon = "🌙" if self.is_dark else "☀️"
+        self.toggle_canvas.create_text(
+            self.switch_x + 9, 14,
+            text=icon, font=('Segoe UI Emoji', 8)
+        )
+    
+    def _on_toggle_click(self, event):
+        """Handle toggle click"""
+        self.toggle()
+    
+    def toggle(self):
+        """Toggle dark mode state"""
+        self.is_dark = not self.is_dark
+        self.target_x = 30 if self.is_dark else 5
+        
+        # Update label
+        self.label.configure(text="🌙 Dark Mode" if self.is_dark else "☀️ Light Mode")
+        
+        # Start animation
+        self._start_animation()
+        
+        # Call callback
+        if self.callback:
+            self.callback(self.is_dark)
+    
+    def set_state(self, is_dark: bool):
+        """Set toggle state without triggering callback"""
+        self.is_dark = is_dark
+        self.switch_x = 30 if is_dark else 5
+        self.target_x = self.switch_x
+        
+        # Update label
+        self.label.configure(text="🌙 Dark Mode" if self.is_dark else "☀️ Light Mode")
+        
+        self._draw_toggle()
+    
+    def _start_animation(self):
+        """Start smooth animation"""
+        self._animate_step()
+    
+    def _animate_step(self):
+        """Animate one step"""
+        if abs(self.switch_x - self.target_x) > 1:
+            if self.switch_x < self.target_x:
+                self.switch_x += self.animation_speed
+            else:
+                self.switch_x -= self.animation_speed
+            
+            self._draw_toggle()
+            self.animation_timer = self.parent.after(16, self._animate_step)
+        else:
+            self.switch_x = self.target_x
+            self._draw_toggle()
+    
+    def pack(self, **kwargs):
+        """Pack the toggle container"""
+        self.container.pack(**kwargs)
+    
+    def grid(self, **kwargs):
+        """Grid the toggle container"""
+        self.container.grid(**kwargs)
+
+
+# Monkey patch to add rounded rectangle to canvas
+def create_rounded_rectangle(self, x1, y1, x2, y2, r, **kwargs):
+    """Create a rounded rectangle on canvas"""
+    points = []
+    for x, y in [(x1, y1 + r), (x1, y1), (x1 + r, y1),
+                 (x2 - r, y1), (x2, y1), (x2, y1 + r),
+                 (x2, y2 - r), (x2, y2), (x2 - r, y2),
+                 (x1 + r, y2), (x1, y2), (x1, y2 - r)]:
+        points.append(x)
+        points.append(y)
+    return self.create_polygon(points, smooth=True, **kwargs)
+
+tk.Canvas.create_rounded_rectangle = create_rounded_rectangle
