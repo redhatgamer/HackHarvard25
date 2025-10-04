@@ -1,0 +1,107 @@
+name: Build and Test Virtual Pet AI Assistant
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  test:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Create virtual environment
+      run: |
+        python -m venv .venv
+    
+    - name: Activate virtual environment and install dependencies
+      run: |
+        .\.venv\Scripts\Activate.ps1
+        pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create .env file from secrets
+      run: |
+        echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+        echo "LOG_LEVEL=INFO" >> .env
+        echo "PET_NAME=Pixie" >> .env
+        echo "PET_PERSONALITY=helpful and friendly" >> .env
+      shell: bash
+    
+    - name: Run tests
+      run: |
+        .\.venv\Scripts\Activate.ps1
+        python demo.py
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    
+    - name: Check code quality
+      run: |
+        .\.venv\Scripts\Activate.ps1
+        # Add any linting or code quality checks here
+        python -m py_compile main.py
+        python -m py_compile src/ai/gemini_client.py
+        python -m py_compile src/pet/pet_manager.py
+        python -m py_compile src/screen/screen_monitor.py
+    
+  build-artifact:
+    needs: test
+    runs-on: windows-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m venv .venv
+        .\.venv\Scripts\Activate.ps1
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Create .env file
+      run: |
+        echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+        echo "LOG_LEVEL=INFO" >> .env
+        echo "PET_NAME=Pixie" >> .env
+        echo "PET_PERSONALITY=helpful and friendly" >> .env
+      shell: bash
+    
+    - name: Build executable with PyInstaller
+      run: |
+        .\.venv\Scripts\Activate.ps1
+        pyinstaller --onefile --windowed --name "VirtualPetAI" main.py
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: virtual-pet-ai-windows
+        path: dist/VirtualPetAI.exe
+    
+    - name: Create release on tag
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Virtual Pet AI v${{ github.ref }}
+        draft: false
+        prerelease: false

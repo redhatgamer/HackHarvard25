@@ -1,0 +1,14 @@
+google-generativeai==0.8.0
+pillow==10.0.1
+pystray==0.19.4
+psutil==5.9.6
+opencv-python==4.8.1.78
+numpy==1.25.2
+pyautogui==0.9.54
+tkinter-toolkit==0.2.0
+pygame==2.5.2
+requests==2.31.0
+python-dotenv==1.0.0
+pygetwindow==0.0.9
+win32gui==221
+pywin32==306
