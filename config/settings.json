@@ -7,8 +7,8 @@
       "height": 270
     },
     "position": {
-      "x": 571,
-      "y": 197
+      "x": 812,
+      "y": 404
     },
     "animations": {
       "idle": "assets/pet/idle.gif",
@@ -23,8 +23,8 @@
       "particle_effects": true,
       "smooth_animations": true
     },
-    "width": 210,
-    "height": 210
+    "width": 290,
+    "height": 290
   },
   "ai": {
     "model": "gemini-2.0-flash-exp",
@@ -83,7 +83,7 @@
       "mood_change_probability": 0.4
     },
     "tts": {
-      "enabled": true,
+      "enabled": false,
       "use_natural_voice": true,
       "british_accent": true,
       "voice_type": "natural_british",
@@ -91,7 +91,7 @@
       "fallback_volume": 0.9
     },
     "voice_input": {
-      "enabled": true,
+      "enabled": false,
       "language": "en-US",
       "energy_threshold": 300,
       "pause_threshold": 0.8,

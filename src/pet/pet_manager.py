@@ -64,6 +64,12 @@ try:
 except ImportError as e:
     VoiceInputManager = None
 
+# Import Google Sheets manager
+try:
+    from src.integrations.google_sheets_manager import GoogleSheetsManager
+except ImportError as e:
+    GoogleSheetsManager = None
+
 class PetManager:
     """Main manager for the virtual pet assistant"""
     
@@ -172,6 +178,29 @@ class PetManager:
         # Enhanced conversation state
         self.conversation_history = []  # Recent conversation for context
         self.last_spontaneous_comment_time = 0
+        
+        # Google Sheets integration
+        self.sheets_manager = None
+        self.csv_logger = None
+        
+        sheets_config = config.get('integrations', {}).get('google_sheets', {})
+        if sheets_config.get('enabled', False) and GoogleSheetsManager:
+            try:
+                credentials_path = sheets_config.get('credentials_path')
+                self.sheets_manager = GoogleSheetsManager(credentials_path)
+                self.logger.info("Google Sheets manager initialized")
+            except Exception as e:
+                self.logger.warning(f"Google Sheets initialization failed: {e}")
+                self.sheets_manager = None
+        
+        # Always initialize simple CSV logger as backup/alternative
+        try:
+            from src.integrations.csv_logger import CSVSheetsLogger
+            self.csv_logger = CSVSheetsLogger("pixie_activity_log.csv")
+            self.logger.info("CSV logger initialized for Google Sheets import")
+        except Exception as e:
+            self.logger.warning(f"CSV logger initialization failed: {e}")
+            self.csv_logger = None
         self.current_mood = "helpful"  # Pet's current mood
         self.personality_traits = ["helpful", "friendly", "curious"]
         self.activity_tracker = {
@@ -487,7 +516,7 @@ class PetManager:
         self.message_index = (self.message_index + 1) % len(self.conversation_messages)
         
         # Show the message with typing effect
-        self.speech_bubble.show_message(message, duration=4000, typing_effect=True)
+        self.speech_bubble.show_message(message, typing_effect=True)
         
         # Log the interaction
         self.logger.info(f"Pet said: {message}")
@@ -549,29 +578,17 @@ class PetManager:
                 "excited": "🎉"
             }.get(self.current_mood, "🐾")
             
+            # Streamlined main menu - most common actions first
             menu_options = [
-                ("💬 Open Full Chat Window", lambda: asyncio.create_task(self._open_chat_interface())),
-                (f"{mood_emoji} Ask Pixie Something", lambda: asyncio.create_task(self._ask_pixie_something())),
-                ("🎤 Ask Question (Voice)", lambda: asyncio.create_task(self._ask_pixie_voice())),
-                ("� Make Pixie Talk", lambda: asyncio.create_task(self._make_spontaneous_comment())),
-                ("📸 Analyze My Screen", lambda: asyncio.create_task(self._analyze_current_screen())),
-                "---",  # Separator - Interaction
-                ("🎭 Change Mood", lambda: self._change_mood_menu()),
-                (f"Current Mood: {self.current_mood.title()} {mood_emoji}", lambda: None),
-                "---",  # Separator - VS Code
-                ("🎯 Fix Current File", lambda: asyncio.create_task(self._fix_current_vscode_file())),
-                "---",  # Separator - Code Generation
-                ("🛠️ Generate Code", lambda: asyncio.create_task(self._show_code_generation_menu())),
-                ("📝 Analyze Code", lambda: asyncio.create_task(self._analyze_code_interface())),
-                ("🔧 Fix Code Errors", lambda: asyncio.create_task(self._fix_code_interface())),
-                ("🧪 Generate Tests", lambda: asyncio.create_task(self._generate_tests_interface())),
-                "---",  # Separator - Appearance
-                ("🔍 Make Bigger", self._resize_bigger),
-                ("🔎 Make Smaller", self._resize_smaller),
-                ("📏 Reset Size", self._reset_pet_size),
-                (theme_text, self._toggle_dark_mode),
-                "---",  # Separator - Settings
-                ("⚙️ Settings", self._open_settings),
+                ("💬 Chat with Pixie", lambda: asyncio.create_task(self._ask_pixie_something())),
+                ("📸 Analyze Screen", lambda: asyncio.create_task(self._analyze_current_screen())),
+                (" Fix Current File", lambda: asyncio.create_task(self._fix_current_vscode_file())),
+                "---",  # Separator
+                ("🛠️ Code Tools ►", lambda: self._show_code_tools_submenu(event)),
+                ("📊 Google Sheets ►", lambda: self._show_sheets_submenu(event)),
+                ("🎭 Pet Options ►", lambda: self._show_pet_options_submenu(event)),
+                ("⚙️ Settings ►", lambda: self._show_settings_submenu(event)),
+                "---",  # Separator
                 ("❌ Exit", self._exit_application)
             ]
             
@@ -601,6 +618,92 @@ class PetManager:
                 menu.tk_popup(event.x_root, event.y_root)
             finally:
                 menu.grab_release()
+
+    def _show_code_tools_submenu(self, parent_event):
+        """Show code tools submenu"""
+        if ModernContextMenu:
+            submenu_options = [
+                ("🛠️ Generate Code", lambda: asyncio.create_task(self._show_code_generation_menu())),
+                ("📝 Analyze Code", lambda: asyncio.create_task(self._analyze_code_interface())),
+                ("🔧 Fix Code Errors", lambda: asyncio.create_task(self._fix_code_interface())),
+                ("🧪 Generate Tests", lambda: asyncio.create_task(self._generate_tests_interface())),
+                ("💬 Full Chat Window", lambda: asyncio.create_task(self._open_chat_interface()))
+            ]
+            submenu = ModernContextMenu(self.root)
+            submenu.show(parent_event.x_root + 20, parent_event.y_root, submenu_options)
+
+    def _show_pet_options_submenu(self, parent_event):
+        """Show pet options submenu"""
+        if ModernContextMenu:
+            # Get current mood emoji
+            mood_emoji = {
+                "helpful": "🤝", "playful": "😸", "curious": "🤔",
+                "encouraging": "💪", "sleepy": "😴", "excited": "🎉"
+            }.get(self.current_mood, "🐾")
+            
+            submenu_options = [
+                ("🎭 Change Mood", lambda: self._change_mood_menu()),
+                (f"Current: {self.current_mood.title()} {mood_emoji}", lambda: None),
+                "---",
+                ("🎤 Voice Question", lambda: asyncio.create_task(self._ask_pixie_voice())),
+                ("💬 Make Pet Talk", lambda: asyncio.create_task(self._make_spontaneous_comment())),
+                "---",
+                ("🔍 Make Bigger", self._resize_bigger),
+                ("🔎 Make Smaller", self._resize_smaller),
+                ("📏 Reset Size", self._reset_pet_size)
+            ]
+            submenu = ModernContextMenu(self.root)
+            submenu.show(parent_event.x_root + 20, parent_event.y_root, submenu_options)
+
+    def _show_settings_submenu(self, parent_event):
+        """Show settings submenu"""
+        if ModernContextMenu:
+            # Determine current theme for toggle text
+            current_theme = self.style_manager.get_theme() if self.style_manager else None
+            is_dark = current_theme.is_dark_theme() if current_theme else False
+            theme_text = "☀️ Light Mode" if is_dark else "🌙 Dark Mode"
+            
+            submenu_options = [
+                (theme_text, self._toggle_dark_mode),
+                ("⚙️ Open Settings", self._open_settings),
+                "---",
+                ("📋 View Logs", lambda: self._open_log_file()),
+                ("🔄 Restart Pet", lambda: self._restart_application())
+            ]
+            submenu = ModernContextMenu(self.root)
+            submenu.show(parent_event.x_root + 20, parent_event.y_root, submenu_options)
+
+    def _show_sheets_submenu(self, parent_event):
+        """Show Google Sheets submenu"""
+        if ModernContextMenu:
+            # Check if sheets manager is available
+            sheets_available = self.sheets_manager and self.sheets_manager.is_connected()
+            csv_available = self.csv_logger is not None
+            
+            if csv_available:
+                row_count = self.csv_logger.get_row_count()
+                status_text = f"📄 CSV Ready ({row_count} entries)"
+            else:
+                status_text = "✅ API Connected" if sheets_available else "⚠️ Not Connected"
+            
+            submenu_options = [
+                (f"Status: {status_text}", lambda: None),
+                "---",
+                # Simple CSV options (always available)
+                ("📄 Log to CSV (Simple)", lambda: asyncio.create_task(self._log_to_csv())),
+                ("📋 Show CSV Instructions", lambda: self._show_csv_import_guide()),
+                ("� Open CSV File", lambda: self._open_csv_file()),
+                "---",
+                # Advanced API options
+                ("📊 Connect to Sheet (API)", lambda: asyncio.create_task(self._connect_to_sheet())),
+                ("� Create Project Tracker", lambda: asyncio.create_task(self._create_project_sheet())),
+                ("📈 Insert Screen Analysis", lambda: asyncio.create_task(self._analyze_screen_to_sheet())),
+                "---",
+                ("🔧 Setup Google Sheets", lambda: self._setup_google_sheets()),
+                ("📖 View Sheet", lambda: self._open_current_sheet())
+            ]
+            submenu = ModernContextMenu(self.root)
+            submenu.show(parent_event.x_root + 20, parent_event.y_root, submenu_options)
     
     def _show_activity_indicator(self, active: bool = True):
         """Show or hide activity indicator with modern styling"""
@@ -774,7 +877,7 @@ class PetManager:
             if self.speech_bubble:
                 # Truncate analysis for speech bubble display
                 short_analysis = analysis[:100] + "..." if len(analysis) > 100 else analysis
-                self.speech_bubble.show_message(f"📸 {short_analysis}", duration=6000, typing_effect=True)
+                self.speech_bubble.show_message(f"📸 {short_analysis}", typing_effect=True)
             elif self.chat_window and self.chat_window.winfo_exists():
                 self._add_chat_message("Pixie", f"📸 I can see your screen! Here's what I notice:\n\n{analysis}")
             else:
@@ -787,7 +890,7 @@ class PetManager:
             
             # Show error in speech bubble if available
             if self.speech_bubble:
-                self.speech_bubble.show_message(error_msg, duration=4000, typing_effect=True)
+                self.speech_bubble.show_message(error_msg, typing_effect=True)
             elif self.chat_window and self.chat_window.winfo_exists():
                 self._add_chat_message("Pixie", error_msg)
             else:
@@ -887,7 +990,7 @@ class PetManager:
         try:
             # Add visual indicator that we're processing
             if self.speech_bubble:
-                self.speech_bubble.show_message("🎤 Thinking...", duration=1000)
+                self.speech_bubble.show_message("🎤 Thinking...", duration=2000)
             
             # Get AI response
             response = await self.gemini_client.chat_response(
@@ -896,9 +999,10 @@ class PetManager:
             )
             
             if response:
-                # Show response in speech bubble
+                # Show response in speech bubble with dynamic duration
                 if self.speech_bubble:
-                    self.speech_bubble.show_message(f"💭 {response}", duration=8000)
+                    # Let the bubble calculate its own duration based on length
+                    self.speech_bubble.show_message(f"💭 {response}")
                 
                 # Add to chat history
                 self._add_chat_message("You", question)
@@ -920,7 +1024,7 @@ class PetManager:
             else:
                 error_msg = "Sorry, I couldn't understand that. Could you try again?"
                 if self.speech_bubble:
-                    self.speech_bubble.show_message(f"❓ {error_msg}", duration=3000)
+                    self.speech_bubble.show_message(f"❓ {error_msg}")
                 
                 if self.speech_manager:
                     def speak_error():
@@ -936,7 +1040,7 @@ class PetManager:
             self.logger.error(f"Error processing voice question: {e}")
             error_msg = "Sorry, I had trouble processing that question."
             if self.speech_bubble:
-                self.speech_bubble.show_message(f"❌ {error_msg}", duration=3000)
+                self.speech_bubble.show_message(f"❌ {error_msg}")
     
     def _open_settings(self):
         """Open settings window"""
@@ -947,6 +1051,36 @@ class PetManager:
         
         ttk.Label(settings_window, text="Settings coming soon! 🛠️").pack(expand=True)
         ttk.Button(settings_window, text="Close", command=settings_window.destroy).pack(pady=10)
+
+    def _open_log_file(self):
+        """Open the log file in default text editor"""
+        try:
+            log_path = Path("logs") / f"pet_assistant_{time.strftime('%Y%m%d')}.log"
+            if log_path.exists():
+                import os
+                os.startfile(str(log_path))  # Windows
+            else:
+                messagebox.showinfo("Log File", "No log file found for today.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open log file: {e}")
+
+    def _restart_application(self):
+        """Restart the application"""
+        if messagebox.askquestion("Restart", "Restart Pixie? This will close and reopen the pet.") == 'yes':
+            try:
+                import subprocess
+                import sys
+                # Get the path to the current Python executable and script
+                python_exe = sys.executable
+                script_path = Path(__file__).parent.parent.parent / "main.py"
+                
+                # Start new process
+                subprocess.Popen([python_exe, str(script_path)])
+                
+                # Close current instance
+                self._exit_application()
+            except Exception as e:
+                messagebox.showerror("Restart Error", f"Could not restart application: {e}")
     
     def _exit_application(self):
         """Exit the application"""
@@ -1002,7 +1136,7 @@ class PetManager:
         """Show code generation interface"""
         try:
             if not self.gemini_client:
-                await self._show_speech_bubble("I need a Gemini API key to generate code! 🔑", duration=3000)
+                await self._show_speech_bubble("I need a Gemini API key to generate code! 🔑")
                 return
             
             # Create a simple input dialog
@@ -1032,17 +1166,17 @@ class PetManager:
                 if result.get('success'):
                     await self._show_code_result_window(result, "Generated Code")
                 else:
-                    await self._show_speech_bubble(f"Code generation failed: {result.get('error', 'Unknown error')} 😿", duration=4000)
+                    await self._show_speech_bubble(f"Code generation failed: {result.get('error', 'Unknown error')} 😿")
                     
         except Exception as e:
             self.logger.error(f"Error in code generation: {e}")
-            await self._show_speech_bubble("Something went wrong with code generation! 😿", duration=3000)
+            await self._show_speech_bubble("Something went wrong with code generation! 😿")
     
     async def _analyze_code_interface(self):
         """Show code analysis interface"""
         try:
             if not self.gemini_client:
-                await self._show_speech_bubble("I need a Gemini API key to analyze code! 🔑", duration=3000)
+                await self._show_speech_bubble("I need a Gemini API key to analyze code! 🔑")
                 return
             
             # Try to get code from clipboard or ask user
@@ -1072,19 +1206,19 @@ class PetManager:
                 if result.get('success'):
                     await self._show_analysis_result_window(result)
                 else:
-                    await self._show_speech_bubble(f"Code analysis failed: {result.get('error', 'Unknown error')} 😿", duration=4000)
+                    await self._show_speech_bubble(f"Code analysis failed: {result.get('error', 'Unknown error')} 😿")
             else:
-                await self._show_speech_bubble("I need some code to analyze! 🤔", duration=3000)
+                await self._show_speech_bubble("I need some code to analyze! 🤔")
                 
         except Exception as e:
             self.logger.error(f"Error in code analysis: {e}")
-            await self._show_speech_bubble("Something went wrong with code analysis! 😿", duration=3000)
+            await self._show_speech_bubble("Something went wrong with code analysis! 😿")
     
     async def _fix_code_interface(self):
         """Show code fixing interface"""
         try:
             if not self.gemini_client:
-                await self._show_speech_bubble("I need a Gemini API key to fix code! 🔑", duration=3000)
+                await self._show_speech_bubble("I need a Gemini API key to fix code! 🔑")
                 return
             
             # Get problematic code
@@ -1113,7 +1247,7 @@ class PetManager:
                     if result.get('success'):
                         await self._show_fix_result_window(result)
                     else:
-                        await self._show_speech_bubble(f"Code fixing failed: {result.get('error', 'Unknown error')} 😿", duration=4000)
+                        await self._show_speech_bubble(f"Code fixing failed: {result.get('error', 'Unknown error')} 😿")
                 else:
                     await self._show_speech_bubble("I need to know what's wrong to help fix it! 🤔", duration=3000)
             else:
@@ -1570,10 +1704,10 @@ class PetManager:
             self.logger.error(f"Error generating tests for VS Code file: {e}")
             await self._show_speech_bubble("Something went wrong creating tests! 😿", duration=3000)
     
-    async def _show_speech_bubble(self, message: str, duration: int = 3000, speak: bool = True):
+    async def _show_speech_bubble(self, message: str, duration: int = None, speak: bool = True):
         """Show a speech bubble message near the pet and optionally speak it"""
         try:
-            # Show visual speech bubble
+            # Show visual speech bubble with automatic duration calculation
             if hasattr(self, 'speech_bubble') and self.speech_bubble:
                 self.speech_bubble.show_message(message, duration)
             elif ModernSpeechBubble and self.root:
@@ -2037,3 +2171,266 @@ class PetManager:
             "sleepy": "😴",
             "excited": "🎉"
         }.get(self.current_mood, "🐾")
+    
+    # Google Sheets Integration Methods
+    
+    async def _connect_to_sheet(self):
+        """Connect to an existing Google Sheet"""
+        if not GoogleSheetsManager:
+            await self._show_speech_bubble("Google Sheets integration not available! Install required packages. 📦")
+            return
+        
+        try:
+            # Simple dialog to get sheet URL or ID
+            if hasattr(self, 'root') and self.root:
+                from tkinter import simpledialog
+                url_or_id = simpledialog.askstring(
+                    "Connect to Google Sheet",
+                    "Enter your Google Sheet URL or ID:\n\n" +
+                    "Full URL: https://docs.google.com/spreadsheets/d/[ID]/edit\n" +
+                    "Or just the Sheet ID (44 characters long)",
+                    parent=self.root
+                )
+                
+                if url_or_id:
+                    if not self.sheets_manager:
+                        self.sheets_manager = GoogleSheetsManager()
+                    
+                    # Use the improved connection method
+                    success, message = self.sheets_manager.connect_with_url_or_id(url_or_id)
+                    await self._show_speech_bubble(message)
+                    
+                    if success:
+                        self.logger.info(f"Connected to sheet: {self.sheets_manager.get_sheet_url()}")
+                    else:
+                        # Provide specific troubleshooting guidance
+                        if "not authenticated" in message.lower():
+                            await self._show_speech_bubble("💡 To connect to Google Sheets, you need API credentials. Right-click → Google Sheets → Setup Google Sheets for help!")
+                        elif "invalid" in message.lower():
+                            await self._show_speech_bubble("💡 Make sure to copy the full URL from your Google Sheet's address bar, or just the 44-character Sheet ID.")
+                else:
+                    await self._show_speech_bubble("No URL or ID provided. 🤔")
+        except Exception as e:
+            self.logger.error(f"Error connecting to sheet: {e}")
+            await self._show_speech_bubble(f"❌ Error connecting to Google Sheet: {str(e)}")
+    
+    async def _create_project_sheet(self):
+        """Create a new project tracking sheet"""
+        if not GoogleSheetsManager:
+            await self._show_speech_bubble("Google Sheets integration not available! 📦")
+            return
+        
+        try:
+            if hasattr(self, 'root') and self.root:
+                from tkinter import simpledialog
+                project_name = simpledialog.askstring(
+                    "Create Project Sheet",
+                    "Enter project name:",
+                    parent=self.root
+                )
+                
+                if project_name:
+                    if not self.sheets_manager:
+                        self.sheets_manager = GoogleSheetsManager()
+                    
+                    await self._show_speech_bubble("Creating project tracker... 📝", duration=2000)
+                    
+                    sheet_id = self.sheets_manager.create_project_tracker(project_name)
+                    if sheet_id:
+                        sheet_url = self.sheets_manager.get_sheet_url(sheet_id)
+                        await self._show_speech_bubble(f"✅ Created project tracker for '{project_name}'! Ready to track your progress. 🎯")
+                        
+                        # Optionally open the sheet in browser
+                        if sheet_url:
+                            import webbrowser
+                            webbrowser.open(sheet_url)
+                    else:
+                        await self._show_speech_bubble("❌ Failed to create project sheet. Check your Google Sheets setup. 🔧")
+        except Exception as e:
+            self.logger.error(f"Error creating project sheet: {e}")
+            await self._show_speech_bubble("❌ Error creating project sheet! 😿")
+    
+    async def _log_to_sheet(self):
+        """Log current activity to the connected sheet"""
+        if not self.sheets_manager or not self.sheets_manager.current_sheet_id:
+            await self._show_speech_bubble("No Google Sheet connected! Connect to a sheet first. 📊")
+            return
+        
+        try:
+            # Get current context or ask user what to log
+            if hasattr(self, 'root') and self.root:
+                from tkinter import simpledialog
+                activity = simpledialog.askstring(
+                    "Log Activity",
+                    "What activity would you like to log?",
+                    initialvalue="Working on code",
+                    parent=self.root
+                )
+                
+                if activity:
+                    # Log with timestamp
+                    timestamp = time.strftime('%Y-%m-%d %H:%M')
+                    row_data = [timestamp, activity, "Completed", "1", f"Logged by Pixie 🐾"]
+                    
+                    if self.sheets_manager.append_row(row_data):
+                        await self._show_speech_bubble(f"✅ Logged '{activity}' to your sheet! 📝")
+                    else:
+                        await self._show_speech_bubble("❌ Failed to log activity. Check your sheet connection. 🔗")
+        except Exception as e:
+            self.logger.error(f"Error logging to sheet: {e}")
+            await self._show_speech_bubble("❌ Error logging activity! 😿")
+    
+    async def _analyze_screen_to_sheet(self):
+        """Analyze current screen and insert results into sheet"""
+        if not self.sheets_manager or not self.sheets_manager.current_sheet_id:
+            await self._show_speech_bubble("No Google Sheet connected! Connect to a sheet first. 📊")
+            return
+        
+        try:
+            await self._show_speech_bubble("Analyzing screen and logging to sheet... 🔍", duration=2000)
+            
+            # Get screen analysis
+            if hasattr(self, 'gemini_client') and self.gemini_client:
+                context = self._capture_context()
+                if context and context.get('screenshot'):
+                    # Analyze screen
+                    result = await self.gemini_client.analyze_screen_async(
+                        screenshot=context['screenshot'],
+                        context=context
+                    )
+                    
+                    if result.get('success') and result.get('analysis'):
+                        analysis = result['analysis'][:200] + "..." if len(result['analysis']) > 200 else result['analysis']
+                        
+                        # Log analysis to sheet
+                        timestamp = time.strftime('%Y-%m-%d %H:%M')
+                        row_data = [timestamp, "Screen Analysis", "Completed", "0.1", analysis]
+                        
+                        if self.sheets_manager.append_row(row_data):
+                            await self._show_speech_bubble(f"✅ Screen analysis logged to sheet! 📊")
+                        else:
+                            await self._show_speech_bubble("❌ Failed to log analysis. Check sheet connection. 🔗")
+                    else:
+                        await self._show_speech_bubble("❌ Failed to analyze screen. 🤖")
+                else:
+                    await self._show_speech_bubble("❌ Could not capture screen for analysis. 📸")
+            else:
+                await self._show_speech_bubble("❌ AI analysis not available. 🤖")
+                
+        except Exception as e:
+            self.logger.error(f"Error analyzing screen to sheet: {e}")
+            await self._show_speech_bubble("❌ Error analyzing screen! 😿")
+    
+    def _setup_google_sheets(self):
+        """Open Google Sheets setup guide"""
+        try:
+            setup_message = """Google Sheets Setup Guide:
+
+1. Go to Google Cloud Console (console.cloud.google.com)
+2. Create a new project or select existing one
+3. Enable the Google Sheets API
+4. Create credentials (Service Account)
+5. Download the JSON credentials file
+6. Add the path to config/settings.json under:
+   "integrations": {
+     "google_sheets": {
+       "enabled": true,
+       "credentials_path": "path/to/your/credentials.json"
+     }
+   }
+
+Need help? Ask Pixie! 🐾"""
+
+            messagebox.showinfo("Google Sheets Setup", setup_message)
+            
+        except Exception as e:
+            self.logger.error(f"Error showing setup: {e}")
+    
+    def _open_current_sheet(self):
+        """Open the current sheet in web browser"""
+        if self.sheets_manager and self.sheets_manager.current_sheet_id:
+            try:
+                import webbrowser
+                sheet_url = self.sheets_manager.get_sheet_url()
+                if sheet_url:
+                    webbrowser.open(sheet_url)
+                    self.logger.info(f"Opened sheet in browser: {sheet_url}")
+                else:
+                    messagebox.showinfo("No Sheet", "No Google Sheet is currently connected.")
+            except Exception as e:
+                self.logger.error(f"Error opening sheet: {e}")
+        else:
+            messagebox.showinfo("No Sheet", "No Google Sheet is currently connected.")
+    
+    # Simple CSV Integration Methods
+    
+    async def _log_to_csv(self):
+        """Log current activity to CSV file"""
+        if not self.csv_logger:
+            await self._show_speech_bubble("CSV logger not available!")
+            return
+        
+        try:
+            if hasattr(self, 'root') and self.root:
+                from tkinter import simpledialog
+                activity = simpledialog.askstring(
+                    "Log to CSV",
+                    "What activity would you like to log?",
+                    initialvalue="Working on project",
+                    parent=self.root
+                )
+                
+                if activity:
+                    success = self.csv_logger.log_activity("Manual Entry", activity, 0, "", "User logged")
+                    if success:
+                        row_count = self.csv_logger.get_row_count()
+                        await self._show_speech_bubble(f"✅ Logged to CSV! Total entries: {row_count}")
+                        self.logger.info(f"Manual activity logged to CSV: {activity}")
+                    else:
+                        await self._show_speech_bubble("❌ Failed to log to CSV file")
+                else:
+                    await self._show_speech_bubble("No activity entered")
+        except Exception as e:
+            self.logger.error(f"Error logging to CSV: {e}")
+            await self._show_speech_bubble("❌ Error logging to CSV!")
+    
+    def _show_csv_import_guide(self):
+        """Show instructions for importing CSV to Google Sheets"""
+        if not self.csv_logger:
+            messagebox.showinfo("CSV Logger", "CSV logger not available.")
+            return
+        
+        try:
+            instructions = self.csv_logger.get_import_instructions()
+            messagebox.showinfo("Google Sheets Import Guide", instructions)
+        except Exception as e:
+            self.logger.error(f"Error showing CSV guide: {e}")
+    
+    def _open_csv_file(self):
+        """Open the CSV file location"""
+        if not self.csv_logger:
+            messagebox.showinfo("CSV Logger", "CSV logger not available.")
+            return
+        
+        try:
+            import os
+            csv_path = self.csv_logger.get_file_path()
+            
+            if os.path.exists(csv_path):
+                # Open file location in Windows Explorer
+                os.system(f'explorer /select,"{csv_path}"')
+                self.logger.info(f"Opened CSV file location: {csv_path}")
+            else:
+                messagebox.showinfo("CSV File", f"CSV file not found at: {csv_path}")
+        except Exception as e:
+            self.logger.error(f"Error opening CSV file: {e}")
+            messagebox.showerror("Error", f"Could not open CSV file: {e}")
+    
+    def auto_log_coding_activity(self, file_name, activity_type="File Edit"):
+        """Automatically log coding activity to CSV"""
+        if self.csv_logger:
+            try:
+                self.csv_logger.log_coding_session(file_name, activity_type, 0)
+                self.logger.info(f"Auto-logged coding activity: {file_name}")
+            except Exception as e:
+                self.logger.error(f"Failed to auto-log activity: {e}")

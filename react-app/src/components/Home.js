@@ -121,8 +121,8 @@ const Home = () => {
             </div>
           </div>
         </div>
-          
-          <div className="hero-visual enhanced-visual">
+        
+        <div className="hero-visual enhanced-visual">
             <div className="pet-showcase cardboard-frame floating-card">
               <div className="frame-corners animated-corners">
                 <div className="corner top-left"></div>

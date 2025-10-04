@@ -503,12 +503,20 @@ class ModernSpeechBubble:
         self.last_pet_y = 0
         self.is_tracking = False
         
-    def show_message(self, message: str, duration: int = 5000, typing_effect: bool = True):
+    def show_message(self, message: str, duration: int = None, typing_effect: bool = True):
         """Show a speech bubble with the given message"""
         self.current_message = message
         self.is_visible = True
         
-        # Create or update bubble window
+        # Calculate appropriate duration based on message length
+        if duration is None:
+            # Base duration + extra time for longer messages
+            base_duration = 4000
+            extra_per_char = 50
+            calculated_duration = base_duration + (len(message) * extra_per_char)
+            duration = min(calculated_duration, 15000)  # Cap at 15 seconds
+        
+        # Create or update bubble window with dynamic sizing
         self._create_bubble_window()
         self._position_bubble()
         
@@ -525,9 +533,12 @@ class ModernSpeechBubble:
         # Start position tracking to follow the pet
         self._start_position_tracking()
         
-        # Auto-hide after duration
+        # Auto-hide after duration (or stay longer for long messages)
         if self.auto_hide_timer:
             self.parent.after_cancel(self.auto_hide_timer)
+        # For very long messages, make them stay until clicked
+        if len(message) > 150:
+            duration = duration * 2  # Double the time for long messages
         self.auto_hide_timer = self.parent.after(duration, self.hide)
     
     def hide(self):
@@ -545,9 +556,12 @@ class ModernSpeechBubble:
         self.parent.after(300, self._destroy_bubble)
     
     def _create_bubble_window(self):
-        """Create the speech bubble window"""
+        """Create the speech bubble window with dynamic sizing"""
         if self.bubble_window:
             self.bubble_window.destroy()
+        
+        # Calculate bubble dimensions based on message length
+        self._calculate_bubble_size()
         
         # Create toplevel window
         self.bubble_window = tk.Toplevel(self.parent)
@@ -555,25 +569,50 @@ class ModernSpeechBubble:
         self.bubble_window.wm_attributes("-topmost", True)
         self.bubble_window.wm_attributes("-transparentcolor", "#000001")
         
-        # Create canvas for drawing bubble
+        # Add click event to close bubble manually
+        self.bubble_window.bind("<Button-1>", lambda e: self.hide())
+        
+        # Create canvas for drawing bubble with dynamic size
         self.canvas = tk.Canvas(
             self.bubble_window,
-            width=300,
-            height=120,
+            width=self.bubble_width,
+            height=self.bubble_height,
             highlightthickness=0,
             bg='#000001',
             bd=0
         )
         self.canvas.pack()
         
+        # Add click event to canvas as well
+        self.canvas.bind("<Button-1>", lambda e: self.hide())
+        
         # Draw bubble background
         self._draw_bubble_background()
+
+    def _calculate_bubble_size(self):
+        """Calculate appropriate bubble size based on message length"""
+        # Estimate text dimensions (rough calculation)
+        char_width = 8  # Average character width in pixels
+        line_height = 16  # Line height in pixels
+        padding = 40  # Padding around text
+        
+        # Calculate lines needed (assuming max line width)
+        max_chars_per_line = 35  # Reasonable max characters per line
+        lines_needed = max(1, (len(self.current_message) + max_chars_per_line - 1) // max_chars_per_line)
+        
+        # Calculate dimensions
+        text_width = min(len(self.current_message) * char_width, max_chars_per_line * char_width)
+        text_height = lines_needed * line_height
+        
+        # Set bubble dimensions with limits
+        self.bubble_width = max(200, min(500, text_width + padding))
+        self.bubble_height = max(80, min(300, text_height + padding + 30))  # +30 for tail
     
     def _draw_bubble_background(self):
         """Draw the speech bubble background with modern styling"""
-        # Bubble dimensions
-        bubble_width = 280
-        bubble_height = 80
+        # Bubble dimensions (now dynamic)
+        bubble_width = self.bubble_width - 20
+        bubble_height = self.bubble_height - 40
         bubble_x = 10
         bubble_y = 10
         corner_radius = 15
@@ -607,12 +646,20 @@ class ModernSpeechBubble:
         ]
         self.canvas.create_polygon(tail_points, fill=surface_color, outline=border_color, width=2)
         
-        # Create text area
+        # Create text area with dynamic sizing
         self.text_id = self.canvas.create_text(
-            bubble_x + bubble_width // 2, bubble_y + bubble_height // 2,
+            bubble_x + bubble_width // 2, bubble_y + bubble_height // 2 - 5,
             text="", font=("Segoe UI", 10), fill=text_color,
             width=bubble_width - 20, justify='left', anchor='center'
         )
+        
+        # Add a subtle close hint for long messages
+        if len(self.current_message) > 100:
+            self.canvas.create_text(
+                bubble_x + bubble_width - 15, bubble_y + 8,
+                text="✕", font=("Segoe UI", 8), fill=text_color,
+                anchor='center'
+            )
     
     def _create_rounded_rectangle(self, x1, y1, x2, y2, radius, **kwargs):
         """Create a rounded rectangle on the canvas"""
@@ -661,15 +708,15 @@ class ModernSpeechBubble:
         screen_width = self.parent.winfo_screenwidth()
         screen_height = self.parent.winfo_screenheight()
         
-        # Adjust if bubble would go off-screen
-        if bubble_x + 300 > screen_width:
-            bubble_x = pet_x - 310  # Position to the left instead
+        # Adjust if bubble would go off-screen (using dynamic dimensions)
+        if bubble_x + self.bubble_width > screen_width:
+            bubble_x = pet_x - self.bubble_width - 10  # Position to the left instead
         if bubble_y < 0:
             bubble_y = pet_y + 20
-        if bubble_y + 120 > screen_height:
-            bubble_y = screen_height - 140
+        if bubble_y + self.bubble_height > screen_height:
+            bubble_y = screen_height - self.bubble_height - 20
         
-        self.bubble_window.geometry(f"300x120+{bubble_x}+{bubble_y}")
+        self.bubble_window.geometry(f"{self.bubble_width}x{self.bubble_height}+{bubble_x}+{bubble_y}")
     
     def _start_typing_effect(self):
         """Start the typing animation effect"""
