@@ -27,6 +27,18 @@ class ModernPetWidget:
         self.hover_scale = 1.0
         self.target_scale = 1.0
         
+        # Image handling for custom pet images
+        self.pet_image = None
+        self.pet_photo = None
+        self.use_custom_image = False
+        
+        # Resizing functionality
+        self.min_size = 50
+        self.max_size = 500
+        self.resize_step = 10
+        self.current_width = size[0]
+        self.current_height = size[1]
+        
         # Create the widget
         self._setup_widget()
         self._create_pet_graphics()
@@ -56,6 +68,15 @@ class ModernPetWidget:
         self.canvas.bind("<Enter>", self._on_hover_enter)
         self.canvas.bind("<Leave>", self._on_hover_leave)
         
+        # Bind resizing events
+        self.canvas.bind("<MouseWheel>", self._on_mouse_wheel)
+        self.canvas.bind("<Button-4>", self._on_mouse_wheel)  # Linux scroll up
+        self.canvas.bind("<Button-5>", self._on_mouse_wheel)  # Linux scroll down
+        
+        # Make canvas focusable for keyboard events
+        self.canvas.focus_set()
+        self.canvas.bind("<KeyPress>", self._on_key_press)
+        
     def _create_pet_graphics(self):
         """Create modern pet graphics with gradients and effects"""
         # Clear canvas
@@ -65,6 +86,11 @@ class ModernPetWidget:
         center_x, center_y = self.size[0] // 2, self.size[1] // 2
         base_radius = min(self.size) // 3
         radius = int(base_radius * self.hover_scale)
+        
+        # Try to load custom image first (like Hirono)
+        if self._try_load_custom_image():
+            self._draw_custom_image(center_x, center_y)
+            return
         
         # Create gradient background (outer glow)
         glow_radius = radius + 15
@@ -98,6 +124,142 @@ class ModernPetWidget:
         
         # Add floating particles for magic effect
         self._add_particle_effects(center_x, center_y, radius)
+    
+    def _try_load_custom_image(self):
+        """Try to load custom pet image (like Hirono)"""
+        try:
+            import os
+            from pathlib import Path
+            
+            # Check multiple possible image paths
+            possible_paths = [
+                "assets/pet/hirono.png",
+                "assets/pet/hirono.jpg", 
+                "assets/pet/hirono.jpeg",
+                "assets/pet/hirono.gif",
+                "assets/pet/pet.png",
+                "assets/pet/pet.jpg",
+                "assets/pet/custom.png",
+                "hirono.png",  # In root directory
+                "pet.png"      # In root directory
+            ]
+            
+            for path in possible_paths:
+                if os.path.exists(path):
+                    self.pet_image = Image.open(path)
+                    # Resize to fit current canvas size while maintaining aspect ratio
+                    image_size = int(min(self.current_width, self.current_height) * 0.85 * self.hover_scale)
+                    self.pet_image = self.pet_image.resize(
+                        (image_size, image_size), 
+                        Image.Resampling.LANCZOS
+                    )
+                    self.pet_photo = ImageTk.PhotoImage(self.pet_image)
+                    self.use_custom_image = True
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"Could not load custom pet image: {e}")
+            return False
+    
+    def _draw_custom_image(self, center_x, center_y):
+        """Draw the custom pet image (like Hirono)"""
+        if self.pet_photo:
+            # Add subtle glow effect around custom image (optional, can be disabled)
+            glow_enabled = self.config.get('glow_effect', True)
+            
+            if glow_enabled:
+                glow_radius = 20
+                glow_colors = ["#FFE4E6", "#FFB6C1", "#FFC0CB", "#FFCCCB", "#FFD6D6"]  # Gradual pink glow
+                
+                for i, color in enumerate(glow_colors):
+                    current_radius = glow_radius + i * 3
+                    self.canvas.create_oval(
+                        center_x - current_radius, center_y - current_radius,
+                        center_x + current_radius, center_y + current_radius,
+                        fill=color, outline=""
+                    )
+            
+            # Draw the custom image
+            self.canvas.create_image(
+                center_x, center_y,
+                image=self.pet_photo,
+                anchor="center"
+            )
+            
+            # Add subtle particle effects if enabled
+            particles_enabled = self.config.get('particle_effects', True)
+            if particles_enabled:
+                self._add_particle_effects(center_x, center_y, 30)
+    
+    def _on_mouse_wheel(self, event):
+        """Handle mouse wheel for resizing"""
+        try:
+            # Determine scroll direction
+            if event.delta > 0 or event.num == 4:  # Scroll up = bigger
+                self._resize_pet(self.resize_step)
+            elif event.delta < 0 or event.num == 5:  # Scroll down = smaller
+                self._resize_pet(-self.resize_step)
+        except AttributeError:
+            # Handle different event formats
+            pass
+    
+    def _on_key_press(self, event):
+        """Handle keyboard shortcuts for resizing"""
+        if event.keysym == 'plus' or event.keysym == 'equal':  # + key
+            self._resize_pet(self.resize_step)
+        elif event.keysym == 'minus':  # - key
+            self._resize_pet(-self.resize_step)
+        elif event.keysym == '0':  # Reset to default size
+            self._reset_size()
+    
+    def _resize_pet(self, size_change):
+        """Resize the pet by the given amount"""
+        new_width = max(self.min_size, min(self.max_size, self.current_width + size_change))
+        new_height = max(self.min_size, min(self.max_size, self.current_height + size_change))
+        
+        if new_width != self.current_width or new_height != self.current_height:
+            self.current_width = new_width
+            self.current_height = new_height
+            self.size = (self.current_width, self.current_height)
+            
+            # Resize the canvas
+            self.canvas.configure(width=self.current_width, height=self.current_height)
+            
+            # Resize the parent window
+            self.parent.geometry(f"{self.current_width}x{self.current_height}")
+            
+            # Recreate graphics with new size
+            self._create_pet_graphics()
+            
+            # Save new size to config
+            self._save_size_to_config()
+    
+    def _reset_size(self):
+        """Reset to default size (120x120)"""
+        default_size = 120
+        self.current_width = default_size
+        self.current_height = default_size
+        self.size = (default_size, default_size)
+        
+        self.canvas.configure(width=default_size, height=default_size)
+        self.parent.geometry(f"{default_size}x{default_size}")
+        
+        self._create_pet_graphics()
+        self._save_size_to_config()
+    
+    def _save_size_to_config(self):
+        """Save the current size to configuration"""
+        try:
+            # Update config in memory (parent widget should handle file saving)
+            if hasattr(self, 'config') and self.config:
+                self.config['width'] = self.current_width
+                self.config['height'] = self.current_height
+                
+            print(f"Pet resized to: {self.current_width}x{self.current_height}")
+        except Exception as e:
+            print(f"Could not save size to config: {e}")
         
     def _draw_gradient_circle(self, cx: int, cy: int, radius: int):
         """Draw a gradient circle for the pet body"""

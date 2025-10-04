@@ -31,7 +31,7 @@ class ConfigManager:
                 }
             },
             "ai": {
-                "model": "gemini-1.5-flash",
+                "model": "gemini-2.0-flash-exp",
                 "temperature": 0.7,
                 "max_tokens": 1000,
                 "system_prompt": "You are a helpful virtual pet assistant. Be friendly, concise, and provide practical help based on what you see on the user's screen."

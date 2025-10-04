@@ -32,6 +32,10 @@ class HotReloadHandler(FileSystemEventHandler):
         # Debounce restarts to avoid multiple triggers
         self.debounce_time = 1.0  # seconds
         
+        # Track config to ignore position-only changes
+        self.last_config_content = None
+        self.config_file_path = None
+        
     def on_modified(self, event):
         if event.is_directory:
             return
@@ -43,12 +47,55 @@ class HotReloadHandler(FileSystemEventHandler):
         # Ignore __pycache__ and log files
         if '__pycache__' in event.src_path or event.src_path.endswith('.log'):
             return
+        
+        # Special handling for settings.json - ignore position-only changes
+        if event.src_path.endswith('settings.json'):
+            if self._is_position_only_change(event.src_path):
+                print(f"📍 Position update ignored: {event.src_path}")
+                return
             
         current_time = time.time()
         if current_time - self.last_restart > self.debounce_time:
             print(f"🔄 File changed: {event.src_path}")
             self.restart_callback()
             self.last_restart = current_time
+    
+    def _is_position_only_change(self, file_path):
+        """Check if the config change is only a position update"""
+        try:
+            import json
+            import copy
+            
+            # Read current config
+            with open(file_path, 'r', encoding='utf-8') as f:
+                current_config = json.load(f)
+            
+            # If we don't have a previous config, this is not just a position change
+            if self.last_config_content is None:
+                self.last_config_content = copy.deepcopy(current_config)
+                return False
+            
+            # Make copies to compare without position data
+            old_config_copy = copy.deepcopy(self.last_config_content)
+            new_config_copy = copy.deepcopy(current_config)
+            
+            # Remove position data from both configs
+            if 'pet' in old_config_copy and 'position' in old_config_copy['pet']:
+                del old_config_copy['pet']['position']
+            if 'pet' in new_config_copy and 'position' in new_config_copy['pet']:
+                del new_config_copy['pet']['position']
+            
+            # If configs are identical without position data, it's position-only
+            is_position_only = old_config_copy == new_config_copy
+            
+            # Update stored config for next comparison
+            self.last_config_content = copy.deepcopy(current_config)
+            
+            return is_position_only
+            
+        except Exception as e:
+            print(f"Error checking config change: {e}")
+            return False  # If we can't determine, allow the restart
 
 class DevServer:
     """Development server with hot-reload capabilities"""

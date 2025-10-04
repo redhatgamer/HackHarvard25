@@ -22,7 +22,39 @@ except ImportError:
     ModernContextMenu = None
 
 class PetManager:
-    """Main manager for the virtual pet assistant"""
+    """Main manager for the vir    def _resize_bigger(self):
+        \"\"\"Make the pet bigger\"\"\"
+        try:
+            if hasattr(self, 'pet_widget') and self.pet_widget:
+                self.pet_widget._resize_pet(20)  # Increase by 20 pixels
+        except Exception as e:
+            self.logger.error(f\"Error resizing pet bigger: {e}\")
+    
+    def _resize_smaller(self):
+        \"\"\"Make the pet smaller\"\"\"
+        try:
+            if hasattr(self, 'pet_widget') and self.pet_widget:
+                self.pet_widget._resize_pet(-20)  # Decrease by 20 pixels
+        except Exception as e:
+            self.logger.error(f\"Error resizing pet smaller: {e}\")
+    
+    def _reset_pet_size(self):
+        \"\"\"Reset pet to default size\"\"\"
+        try:
+            if hasattr(self, 'pet_widget') and self.pet_widget:
+                self.pet_widget._reset_size()
+        except Exception as e:
+            self.logger.error(f\"Error resetting pet size: {e}\")
+    
+    def _open_settings(self):
+        \"\"\"Open settings window\"\"\"
+        settings_window = tk.Toplevel(self.root)
+        settings_window.title(\"Pixie Settings\")
+        settings_window.geometry(\"300x200\")
+        settings_window.wm_attributes(\"-topmost\", True)
+        
+        ttk.Label(settings_window, text=\"Settings coming soon! 🛠️\").pack(expand=True)
+        ttk.Button(settings_window, text=\"Close\", command=settings_window.destroy).pack(pady=10)assistant"""
     
     def __init__(self, gemini_client, screen_monitor, config):
         self.logger = logging.getLogger(__name__)
@@ -39,6 +71,12 @@ class PetManager:
         # State
         self.current_context = None
         self.chat_history = []
+        
+        # Drag state for smooth dragging
+        self.dragging = False
+        self.drag_start_x = 0
+        self.drag_start_y = 0
+        self.click_time = 0
         
         self.logger.info("Pet Manager initialized")
     
@@ -142,9 +180,13 @@ class PetManager:
                 pet_config=pet_config
             )
             
-            # Connect events
-            self.pet_widget.canvas.bind("<Button-1>", self._on_pet_click)
+            # Connect drag and click events
+            self.pet_widget.canvas.bind("<Button-1>", self._on_pet_press)
             self.pet_widget.canvas.bind("<B1-Motion>", self._on_pet_drag)
+            self.pet_widget.canvas.bind("<ButtonRelease-1>", self._on_pet_release)
+            self.pet_widget.canvas.bind("<Double-Button-1>", self._on_pet_double_click)
+            self.pet_widget.canvas.bind("<Enter>", self._on_pet_hover_enter)
+            self.pet_widget.canvas.bind("<Leave>", self._on_pet_hover_leave)
             
             # Store reference to canvas for activity indicator
             self.pet_canvas = self.pet_widget.canvas
@@ -212,23 +254,118 @@ class PetManager:
         
         self.pet_canvas = canvas
         
-        # Bind events
-        canvas.bind("<Button-1>", self._on_pet_click)
+        # Bind events for dragging and clicking
+        canvas.bind("<Button-1>", self._on_pet_press)
         canvas.bind("<B1-Motion>", self._on_pet_drag)
+        canvas.bind("<ButtonRelease-1>", self._on_pet_release)
+        canvas.bind("<Double-Button-1>", self._on_pet_double_click)
+        canvas.bind("<Enter>", self._on_pet_hover_enter)
+        canvas.bind("<Leave>", self._on_pet_hover_leave)
     
-    def _on_pet_click(self, event):
-        """Handle pet click - open chat interface"""
-        asyncio.create_task(self._open_chat_interface())
+    def _on_pet_press(self, event):
+        """Handle mouse press on pet - start drag or prepare for click"""
+        import time
+        self.click_time = time.time()
+        self.dragging = False
+        
+        # Store initial mouse position relative to window
+        self.drag_start_x = event.x_root - self.pet_window.winfo_x()
+        self.drag_start_y = event.y_root - self.pet_window.winfo_y()
+        
+        # Change cursor to indicate draggable
+        self.pet_window.config(cursor="fleur")
     
     def _on_pet_drag(self, event):
-        """Handle pet dragging"""
-        x = self.pet_window.winfo_pointerx() - self.pet_window.winfo_rootx()
-        y = self.pet_window.winfo_pointery() - self.pet_window.winfo_rooty()
+        """Handle pet dragging - move the window"""
+        import time
         
-        new_x = self.pet_window.winfo_pointerx() - x
-        new_y = self.pet_window.winfo_pointery() - y
+        # Start dragging immediately if mouse has moved (more responsive)
+        if not self.dragging and time.time() - self.click_time > 0.05:
+            self.dragging = True
+            # Add slight transparency while dragging for visual feedback
+            try:
+                self.pet_window.wm_attributes("-alpha", 0.9)  # Less transparent for better visibility
+            except:
+                pass  # Alpha not supported on all systems
         
-        self.pet_window.geometry(f"+{new_x}+{new_y}")
+        if self.dragging:
+            # Calculate new window position
+            new_x = event.x_root - self.drag_start_x
+            new_y = event.y_root - self.drag_start_y
+            
+            # Keep pet within screen bounds
+            screen_width = self.pet_window.winfo_screenwidth()
+            screen_height = self.pet_window.winfo_screenheight()
+            pet_width = self.pet_window.winfo_width()
+            pet_height = self.pet_window.winfo_height()
+            
+            # Constrain to screen bounds with small margin
+            margin = 10
+            new_x = max(-margin, min(new_x, screen_width - pet_width + margin))
+            new_y = max(-margin, min(new_y, screen_height - pet_height + margin))
+            
+            # Move the window smoothly
+            self.pet_window.geometry(f"+{new_x}+{new_y}")
+    
+    def _on_pet_release(self, event):
+        """Handle mouse release - save position or handle click"""
+        import time
+        
+        # Reset cursor
+        self.pet_window.config(cursor="")
+        
+        # Restore full opacity
+        try:
+            self.pet_window.wm_attributes("-alpha", 1.0)
+        except:
+            pass
+        
+        if not self.dragging and time.time() - self.click_time < 0.3:
+            # This was a click, not a drag
+            asyncio.create_task(self._open_chat_interface())
+        elif self.dragging:
+            # Save the new position immediately (hot-reload ignores position-only changes)
+            self._save_pet_position()
+        
+        self.dragging = False
+    
+    def _on_pet_double_click(self, event):
+        """Handle double-click - quick screen analysis"""
+        asyncio.create_task(self._analyze_current_screen())
+    
+    def _save_pet_position(self):
+        """Save the current pet position to config"""
+        try:
+            current_x = self.pet_window.winfo_x()
+            current_y = self.pet_window.winfo_y()
+            
+            # Update config in memory
+            if "pet" not in self.config:
+                self.config["pet"] = {}
+            if "position" not in self.config["pet"]:
+                self.config["pet"]["position"] = {}
+            
+            self.config["pet"]["position"]["x"] = current_x
+            self.config["pet"]["position"]["y"] = current_y
+            
+            # Save to config file immediately (hot-reload will ignore position-only changes)
+            from src.utils.config_manager import ConfigManager
+            config_manager = ConfigManager()
+            config_manager.save_config(self.config)
+            
+            self.logger.info(f"Pet position saved: ({current_x}, {current_y})")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save pet position: {e}")
+    
+    def _on_pet_hover_enter(self, event):
+        """Handle mouse entering pet area - show drag cursor"""
+        self.pet_window.config(cursor="hand2")
+    
+    def _on_pet_hover_leave(self, event):
+        """Handle mouse leaving pet area - reset cursor"""
+        if not self.dragging:
+            self.pet_window.config(cursor="")
     
     def _on_pet_right_click(self, event):
         """Handle right click - show modern context menu"""
@@ -237,6 +374,10 @@ class PetManager:
             menu_options = [
                 ("💬 Chat with Pixie", lambda: asyncio.create_task(self._open_chat_interface())),
                 ("📸 Take Screenshot & Analyze", lambda: asyncio.create_task(self._analyze_current_screen())),
+                "---",  # Separator
+                ("🔍 Make Bigger", self._resize_bigger),
+                ("🔎 Make Smaller", self._resize_smaller),
+                ("📏 Reset Size", self._reset_pet_size),
                 "---",  # Separator
                 ("⚙️ Settings", self._open_settings),
                 ("❌ Exit", self._exit_application)
@@ -249,6 +390,10 @@ class PetManager:
             menu = tk.Menu(self.root, tearoff=0, font=('Segoe UI', 10))
             menu.add_command(label="💬 Chat with Pixie", command=lambda: asyncio.create_task(self._open_chat_interface()))
             menu.add_command(label="📸 Take Screenshot & Analyze", command=lambda: asyncio.create_task(self._analyze_current_screen()))
+            menu.add_separator()
+            menu.add_command(label="🔍 Make Bigger", command=self._resize_bigger)
+            menu.add_command(label="🔎 Make Smaller", command=self._resize_smaller)
+            menu.add_command(label="📏 Reset Size", command=self._reset_pet_size)
             menu.add_separator()
             menu.add_command(label="⚙️ Settings", command=self._open_settings)
             menu.add_command(label="❌ Exit", command=self._exit_application)
@@ -533,6 +678,21 @@ class PetManager:
                 self.root.quit()
                 self.root.destroy()
             sys.exit(0)
+    
+    def _resize_bigger(self):
+        """Increase pet size through menu"""
+        if self.pet_widget:
+            self.pet_widget._resize_pet(delta=20)
+    
+    def _resize_smaller(self):
+        """Decrease pet size through menu"""
+        if self.pet_widget:
+            self.pet_widget._resize_pet(delta=-20)
+    
+    def _reset_pet_size(self):
+        """Reset pet to default size through menu"""
+        if self.pet_widget:
+            self.pet_widget._resize_pet(reset_to_default=True)
     
     async def _run_ui_loop(self):
         """Run the UI event loop"""
