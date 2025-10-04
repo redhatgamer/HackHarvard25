@@ -3,12 +3,12 @@
     "name": "Pixie",
     "personality": "helpful and friendly",
     "size": {
-      "width": 120,
-      "height": 120
+      "width": 270,
+      "height": 270
     },
     "position": {
-      "x": 891,
-      "y": 383
+      "x": 750,
+      "y": 320
     },
     "animations": {
       "idle": "assets/pet/idle.gif",
@@ -23,8 +23,8 @@
       "particle_effects": true,
       "smooth_animations": true
     },
-    "width": 290,
-    "height": 290
+    "width": 210,
+    "height": 210
   },
   "ai": {
     "model": "gemini-2.0-flash-exp",

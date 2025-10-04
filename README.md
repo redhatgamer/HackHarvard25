@@ -1,52 +1,45 @@
 # Virtual Pet AI Assistant 🐱🤖
 
-A delightful AI-powered virtual pet that watches your screen and helps you with whatever you're working on! Using Google's Gemini AI, this smart companion provides contextual assistance whether you're coding, working with spreadsheets, browsing, or doing any other computer task.
+A delightful AI-powered virtual pet that sits on your desktop and helps you with whatever you're working on! Using Google's Gemini AI, this smart companion provides contextual assistance and keeps you company while you work.
 
 ## ✨ Features
 
-### 🎨 **Modern UI & Animations**
-- **Glassmorphism Design**: Beautiful translucent interface with modern styling
-- **Smooth Animations**: Breathing effects, particle systems, and hover animations
-- **Emotional Expressions**: Pet shows different emotions (happy, thinking, excited, etc.)
-- **Visual Effects**: Glow effects, ripples, and magical particle bursts
-- **Responsive Design**: Adapts to different screen sizes and resolutions
-
-### 🤖 **AI-Powered Intelligence**
-- **Screen Awareness**: Captures and analyzes your screen content in real-time
-- **Context-Aware AI**: Understands what application you're using and provides relevant help
-- **Multi-Application Support**: 
-  - VS Code: Code assistance, debugging tips, suggestions
-  - Excel/Spreadsheets: Formula help, data analysis tips
-  - Web Browsers: Research assistance, content summaries
-  - And much more!
-
-### 🎮 **Interactive Pet Experience**
-- **Animated Virtual Pet**: Adorable pet character with lifelike animations
-- **Voice & Text Interaction**: Communicate through typing or speech
+### 🎨 **Modern Pet Interface**
+- **Animated Virtual Pet**: Adorable pet character with smooth animations
 - **Drag & Drop**: Move your pet anywhere on screen
-- **Context Menus**: Modern right-click menus with smooth animations
-- **Activity Indicators**: Visual feedback when Pixie is thinking or working
+- **Interactive Experience**: Click and interact with your pet
+- **Visual Effects**: Beautiful animations and visual feedback
 
-### 🔒 **Privacy & Customization**
-- **Privacy Focused**: All processing respects your privacy settings
-- **Themeable**: Customizable colors, fonts, and visual effects
-- **Configurable**: Adjust transparency, animations, and behavior
-- **Lightweight**: Minimal resource usage with efficient animations
+### 🤖 **AI-Powered Intelligence**  
+- **Screen Awareness**: Captures and analyzes your screen content
+- **Context-Aware Help**: Understands what you're working on and provides relevant assistance
+- **Smart Conversations**: Powered by Google's Gemini AI for natural interactions
+
+### � **Web Interface**
+- **React-based Website**: Beautiful web interface for your pet
+- **Responsive Design**: Works on all screen sizes
+- **Modern UI**: Clean, intuitive user experience
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 - Python 3.8 or higher
-- Windows OS (primary support)
+- Node.js (for React app)
 - Google Gemini API key
 
-### Installation
+### Quick Start
 
-1. Clone this repository:
-```bash
-git clone https://github.com/redhatgamer/HackHarvard25.git
-cd HackHarvard25
-```
+1. **Desktop Pet Setup:**
+   - Install Python dependencies: `pip install -r requirements.txt`
+   - Set up your Gemini API key in `config/settings.json`
+   - Run: `start.bat` or `python main.py`
+
+2. **Web Interface Setup:**
+   ```bash
+   cd react-app
+   npm install
+   npm start
+   ```
 
 2. Install dependencies:
 ```bash

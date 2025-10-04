@@ -1,0 +1,9 @@
+@echo off
+echo Starting Virtual Pet AI Assistant...
+echo.
+echo Activating virtual environment...
+call .venv\Scripts\activate.bat
+echo.
+echo Starting pet application...
+python main.py
+pause

@@ -10,7 +10,20 @@ from tkinter import ttk, messagebox, simpledialog
 from typing import Optional, Dict, Any
 import threading
 import sys
+from pathlib import Path
 from PIL import Image, ImageTk
+
+# Import file management
+try:
+    from src.file.file_manager import FileManager
+except ImportError:
+    FileManager = None
+
+# Import VS Code integration
+try:
+    from src.vscode.vscode_integration import VSCodeIntegration
+except ImportError:
+    VSCodeIntegration = None
 
 # Import modern UI components
 try:
@@ -23,45 +36,27 @@ except ImportError:
     ModernSpeechBubble = None
 
 class PetManager:
-    """Main manager for the vir    def _resize_bigger(self):
-        \"\"\"Make the pet bigger\"\"\"
-        try:
-            if hasattr(self, 'pet_widget') and self.pet_widget:
-                self.pet_widget._resize_pet(20)  # Increase by 20 pixels
-        except Exception as e:
-            self.logger.error(f\"Error resizing pet bigger: {e}\")
-    
-    def _resize_smaller(self):
-        \"\"\"Make the pet smaller\"\"\"
-        try:
-            if hasattr(self, 'pet_widget') and self.pet_widget:
-                self.pet_widget._resize_pet(-20)  # Decrease by 20 pixels
-        except Exception as e:
-            self.logger.error(f\"Error resizing pet smaller: {e}\")
-    
-    def _reset_pet_size(self):
-        \"\"\"Reset pet to default size\"\"\"
-        try:
-            if hasattr(self, 'pet_widget') and self.pet_widget:
-                self.pet_widget._reset_size()
-        except Exception as e:
-            self.logger.error(f\"Error resetting pet size: {e}\")
-    
-    def _open_settings(self):
-        \"\"\"Open settings window\"\"\"
-        settings_window = tk.Toplevel(self.root)
-        settings_window.title(\"Pixie Settings\")
-        settings_window.geometry(\"300x200\")
-        settings_window.wm_attributes(\"-topmost\", True)
-        
-        ttk.Label(settings_window, text=\"Settings coming soon! 🛠️\").pack(expand=True)
-        ttk.Button(settings_window, text=\"Close\", command=settings_window.destroy).pack(pady=10)assistant"""
+    """Main manager for the virtual pet assistant"""
     
     def __init__(self, gemini_client, screen_monitor, config):
         self.logger = logging.getLogger(__name__)
         self.gemini_client = gemini_client
         self.screen_monitor = screen_monitor
         self.config = config
+        
+        # Initialize file manager
+        try:
+            self.file_manager = FileManager() if FileManager else None
+        except Exception as e:
+            self.logger.warning(f"Could not initialize file manager: {e}")
+            self.file_manager = None
+        
+        # Initialize VS Code integration
+        try:
+            self.vscode_integration = VSCodeIntegration(self.file_manager) if VSCodeIntegration else None
+        except Exception as e:
+            self.logger.warning(f"Could not initialize VS Code integration: {e}")
+            self.vscode_integration = None
         
         # UI components
         self.root = None
@@ -129,7 +124,7 @@ class PetManager:
         
         # Window properties
         pet_config = self.config.get("pet", {})
-        size = pet_config.get("size", {"width": 120, "height": 120})  # Slightly larger for modern design
+        size = pet_config.get("size", {"width": 270, "height": 270})  # Default startup size
         
         self.pet_window.title("Pixie - Your AI Pet")
         self.pet_window.geometry(f"{size['width']}x{size['height']}")
@@ -424,11 +419,18 @@ class PetManager:
                 ("💬 Open Full Chat Window", lambda: asyncio.create_task(self._open_chat_interface())),
                 ("💭 Say Something", lambda: asyncio.create_task(self._show_pet_message())),
                 ("📸 Take Screenshot & Analyze", lambda: asyncio.create_task(self._analyze_current_screen())),
-                "---",  # Separator
-                ("🔍 Make Bigger", self._resize_bigger),
+                "---",  # Separator - VS Code
+                ("🎯 Fix Current File", lambda: asyncio.create_task(self._fix_current_vscode_file())),
+                "---",  # Separator - Code Generation
+                ("🛠️ Generate Code", lambda: asyncio.create_task(self._show_code_generation_menu())),
+                ("� Analyze Code", lambda: asyncio.create_task(self._analyze_code_interface())),
+                ("🔧 Fix Code Errors", lambda: asyncio.create_task(self._fix_code_interface())),
+                ("🧪 Generate Tests", lambda: asyncio.create_task(self._generate_tests_interface())),
+                "---",  # Separator - Appearance
+                ("�🔍 Make Bigger", self._resize_bigger),
                 ("🔎 Make Smaller", self._resize_smaller),
                 ("📏 Reset Size", self._reset_pet_size),
-                "---",  # Separator
+                "---",  # Separator - Settings
                 ("⚙️ Settings", self._open_settings),
                 ("❌ Exit", self._exit_application)
             ]
@@ -441,7 +443,14 @@ class PetManager:
             menu.add_command(label="💬 Chat with Pixie", command=lambda: asyncio.create_task(self._open_chat_interface()))
             menu.add_command(label="📸 Take Screenshot & Analyze", command=lambda: asyncio.create_task(self._analyze_current_screen()))
             menu.add_separator()
-            menu.add_command(label="🔍 Make Bigger", command=self._resize_bigger)
+            menu.add_command(label="🎯 Fix Current File", command=lambda: asyncio.create_task(self._fix_current_vscode_file()))
+            menu.add_separator()
+            menu.add_command(label="�️ Generate Code", command=lambda: asyncio.create_task(self._show_code_generation_menu()))
+            menu.add_command(label="📝 Analyze Code", command=lambda: asyncio.create_task(self._analyze_code_interface()))
+            menu.add_command(label="🔧 Fix Code Errors", command=lambda: asyncio.create_task(self._fix_code_interface()))
+            menu.add_command(label="🧪 Generate Tests", command=lambda: asyncio.create_task(self._generate_tests_interface()))
+            menu.add_separator()
+            menu.add_command(label="�🔍 Make Bigger", command=self._resize_bigger)
             menu.add_command(label="🔎 Make Smaller", command=self._resize_smaller)
             menu.add_command(label="📏 Reset Size", command=self._reset_pet_size)
             menu.add_separator()
@@ -764,3 +773,596 @@ class PetManager:
                 self.logger.error(f"Error in UI loop: {e}")
         
         self.is_running = False
+    
+    # ===== Code Generation Features =====
+    
+    async def _show_code_generation_menu(self):
+        """Show code generation interface"""
+        try:
+            if not self.gemini_client:
+                await self._show_speech_bubble("I need a Gemini API key to generate code! 🔑", duration=3000)
+                return
+            
+            # Create a simple input dialog
+            request = simpledialog.askstring(
+                "Code Generation 🛠️",
+                "What code would you like me to generate?\n\nExample: 'Create a Python function to sort a list of dictionaries by name'"
+            )
+            
+            if request:
+                await self._show_speech_bubble("Generating code... 🔧", duration=2000)
+                
+                # Detect language from context or ask user
+                language = self._detect_current_language()
+                if not language:
+                    language = simpledialog.askstring(
+                        "Programming Language",
+                        "Which programming language? (python, javascript, java, etc.)"
+                    ) or "python"
+                
+                # Generate code
+                result = await self.gemini_client.generate_code(
+                    request=request,
+                    language=language,
+                    context=self._get_current_file_context()
+                )
+                
+                if result.get('success'):
+                    await self._show_code_result_window(result, "Generated Code")
+                else:
+                    await self._show_speech_bubble(f"Code generation failed: {result.get('error', 'Unknown error')} 😿", duration=4000)
+                    
+        except Exception as e:
+            self.logger.error(f"Error in code generation: {e}")
+            await self._show_speech_bubble("Something went wrong with code generation! 😿", duration=3000)
+    
+    async def _analyze_code_interface(self):
+        """Show code analysis interface"""
+        try:
+            if not self.gemini_client:
+                await self._show_speech_bubble("I need a Gemini API key to analyze code! 🔑", duration=3000)
+                return
+            
+            # Try to get code from clipboard or ask user
+            code_input = self._get_clipboard_code()
+            if not code_input:
+                code_input = simpledialog.askstring(
+                    "Code Analysis 📝",
+                    "Paste the code you want me to analyze:",
+                    initialvalue=""
+                )
+            
+            if code_input and code_input.strip():
+                await self._show_speech_bubble("Analyzing your code... 🔍", duration=2000)
+                
+                language = self._detect_language_from_code(code_input)
+                task = simpledialog.askstring(
+                    "Analysis Type",
+                    "What type of analysis? (review, explain, optimize, debug)"
+                ) or "review"
+                
+                result = await self.gemini_client.analyze_code(
+                    code=code_input,
+                    language=language,
+                    task=task
+                )
+                
+                if result.get('success'):
+                    await self._show_analysis_result_window(result)
+                else:
+                    await self._show_speech_bubble(f"Code analysis failed: {result.get('error', 'Unknown error')} 😿", duration=4000)
+            else:
+                await self._show_speech_bubble("I need some code to analyze! 🤔", duration=3000)
+                
+        except Exception as e:
+            self.logger.error(f"Error in code analysis: {e}")
+            await self._show_speech_bubble("Something went wrong with code analysis! 😿", duration=3000)
+    
+    async def _fix_code_interface(self):
+        """Show code fixing interface"""
+        try:
+            if not self.gemini_client:
+                await self._show_speech_bubble("I need a Gemini API key to fix code! 🔑", duration=3000)
+                return
+            
+            # Get problematic code
+            code_input = self._get_clipboard_code() or simpledialog.askstring(
+                "Code Fixing 🔧",
+                "Paste the problematic code:"
+            )
+            
+            if code_input and code_input.strip():
+                error_msg = simpledialog.askstring(
+                    "Error Description",
+                    "What's the error or problem you're experiencing?"
+                )
+                
+                if error_msg:
+                    await self._show_speech_bubble("Fixing your code... 🛠️", duration=2000)
+                    
+                    language = self._detect_language_from_code(code_input)
+                    
+                    result = await self.gemini_client.fix_code_errors(
+                        code=code_input,
+                        error_message=error_msg,
+                        language=language
+                    )
+                    
+                    if result.get('success'):
+                        await self._show_fix_result_window(result)
+                    else:
+                        await self._show_speech_bubble(f"Code fixing failed: {result.get('error', 'Unknown error')} 😿", duration=4000)
+                else:
+                    await self._show_speech_bubble("I need to know what's wrong to help fix it! 🤔", duration=3000)
+            else:
+                await self._show_speech_bubble("I need some code to fix! 🤔", duration=3000)
+                
+        except Exception as e:
+            self.logger.error(f"Error in code fixing: {e}")
+            await self._show_speech_bubble("Something went wrong with code fixing! 😿", duration=3000)
+    
+    async def _generate_tests_interface(self):
+        """Show test generation interface"""
+        try:
+            if not self.gemini_client:
+                await self._show_speech_bubble("I need a Gemini API key to generate tests! 🔑", duration=3000)
+                return
+            
+            # Get code to test
+            code_input = self._get_clipboard_code() or simpledialog.askstring(
+                "Test Generation 🧪",
+                "Paste the code you want me to write tests for:"
+            )
+            
+            if code_input and code_input.strip():
+                language = self._detect_language_from_code(code_input)
+                test_framework = "unittest" if language == "python" else "jest"
+                
+                if language == "python":
+                    test_framework = simpledialog.askstring(
+                        "Test Framework",
+                        "Which test framework? (unittest, pytest)"
+                    ) or "unittest"
+                
+                await self._show_speech_bubble("Writing tests... 🧪", duration=2000)
+                
+                result = await self.gemini_client.generate_tests(
+                    code=code_input,
+                    language=language,
+                    test_framework=test_framework
+                )
+                
+                if result.get('success'):
+                    await self._show_test_result_window(result)
+                else:
+                    await self._show_speech_bubble(f"Test generation failed: {result.get('error', 'Unknown error')} 😿", duration=4000)
+            else:
+                await self._show_speech_bubble("I need some code to write tests for! 🤔", duration=3000)
+                
+        except Exception as e:
+            self.logger.error(f"Error in test generation: {e}")
+            await self._show_speech_bubble("Something went wrong with test generation! 😿", duration=3000)
+    
+    # ===== Helper Methods =====
+    
+    def _detect_current_language(self) -> Optional[str]:
+        """Try to detect current programming language from screen context"""
+        try:
+            if self.current_context and 'active_app' in self.current_context:
+                app = self.current_context['active_app'].lower()
+                title = self.current_context.get('window_title', '').lower()
+                
+                if 'code' in app or 'vscode' in app:
+                    # Try to detect from file extension in title
+                    if '.py' in title: return 'python'
+                    elif '.js' in title: return 'javascript'
+                    elif '.ts' in title: return 'typescript'
+                    elif '.java' in title: return 'java'
+                    elif '.cpp' in title or '.c' in title: return 'cpp'
+                    elif '.cs' in title: return 'csharp'
+                    elif '.go' in title: return 'go'
+                    elif '.rs' in title: return 'rust'
+                    elif '.php' in title: return 'php'
+                
+            return None
+        except Exception:
+            return None
+    
+    def _detect_language_from_code(self, code: str) -> str:
+        """Detect programming language from code content"""
+        code_lower = code.lower().strip()
+        
+        if 'def ' in code or 'import ' in code or 'print(' in code:
+            return 'python'
+        elif 'function ' in code or 'const ' in code or 'console.log' in code:
+            return 'javascript'
+        elif 'public class ' in code or 'System.out' in code:
+            return 'java'
+        elif '#include' in code or 'cout <<' in code:
+            return 'cpp'
+        elif 'using namespace' in code or 'Console.WriteLine' in code:
+            return 'csharp'
+        else:
+            return 'python'  # Default fallback
+    
+    def _get_current_file_context(self) -> Dict[str, Any]:
+        """Get context about current file being edited"""
+        context = {}
+        
+        if self.current_context:
+            context.update(self.current_context)
+        
+        if self.file_manager:
+            try:
+                project_info = self.file_manager.analyze_project_structure()
+                if project_info.get('success'):
+                    context['project_type'] = project_info['structure'].get('primary_language')
+                    context['recent_files'] = self.file_manager.get_recent_files(5)
+            except Exception as e:
+                self.logger.warning(f"Could not get project context: {e}")
+        
+        return context
+    
+    def _get_clipboard_code(self) -> Optional[str]:
+        """Try to get code from clipboard"""
+        try:
+            clipboard_content = self.root.clipboard_get()
+            # Simple heuristic to check if clipboard contains code
+            if any(keyword in clipboard_content for keyword in ['def ', 'function ', 'class ', '{', '}', ';']):
+                return clipboard_content
+        except Exception:
+            pass
+        return None
+    
+    # ===== Result Display Windows =====
+    
+    async def _show_code_result_window(self, result: Dict[str, Any], title: str):
+        """Show generated code in a result window"""
+        try:
+            window = tk.Toplevel(self.root)
+            window.title(f"Pixie - {title}")
+            window.geometry("800x600")
+            window.wm_attributes("-topmost", True)
+            
+            # Create notebook for tabs
+            notebook = ttk.Notebook(window)
+            notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            # Code tab
+            code_frame = ttk.Frame(notebook)
+            notebook.add(code_frame, text="Generated Code")
+            
+            # Code text area
+            code_text = tk.Text(code_frame, wrap=tk.NONE, font=('Consolas', 11))
+            code_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            code_text.insert(tk.END, result.get('code', ''))
+            
+            # Info tab
+            info_frame = ttk.Frame(notebook)
+            notebook.add(info_frame, text="Details")
+            
+            info_text = tk.Text(info_frame, wrap=tk.WORD, font=('Segoe UI', 10))
+            info_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            info_content = f"""📋 Explanation:
+{result.get('explanation', 'No explanation provided')}
+
+📁 Suggested Filename:
+{result.get('filename_suggestion', 'code_file.txt')}
+
+📦 Dependencies:
+{', '.join(result.get('dependencies', [])) or 'None'}
+
+💡 Usage Example:
+{result.get('usage_example', 'No example provided')}
+"""
+            info_text.insert(tk.END, info_content)
+            
+            # Buttons frame
+            button_frame = ttk.Frame(window)
+            button_frame.pack(fill=tk.X, padx=10, pady=5)
+            
+            def save_code():
+                if self.file_manager:
+                    filename = result.get('filename_suggestion', 'generated_code.py')
+                    save_result = self.file_manager.create_new_file(filename, result.get('code', ''))
+                    if save_result.get('success'):
+                        messagebox.showinfo("Success", f"Code saved to {save_result['path']}")
+                    else:
+                        messagebox.showerror("Error", f"Failed to save: {save_result.get('error')}")
+                else:
+                    messagebox.showerror("Error", "File manager not available")
+            
+            def copy_code():
+                window.clipboard_clear()
+                window.clipboard_append(result.get('code', ''))
+                messagebox.showinfo("Copied", "Code copied to clipboard!")
+            
+            ttk.Button(button_frame, text="💾 Save File", command=save_code).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="📋 Copy Code", command=copy_code).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="❌ Close", command=window.destroy).pack(side=tk.RIGHT, padx=5)
+            
+        except Exception as e:
+            self.logger.error(f"Error showing code result: {e}")
+            await self._show_speech_bubble("Error displaying results! 😿", duration=3000)
+    
+    async def _show_analysis_result_window(self, result: Dict[str, Any]):
+        """Show code analysis results"""
+        try:
+            window = tk.Toplevel(self.root)
+            window.title("Pixie - Code Analysis")
+            window.geometry("700x500")
+            window.wm_attributes("-topmost", True)
+            
+            # Create scrollable text area
+            text_frame = ttk.Frame(window)
+            text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            text_widget = tk.Text(text_frame, wrap=tk.WORD, font=('Segoe UI', 10))
+            scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=text_widget.yview)
+            text_widget.configure(yscrollcommand=scrollbar.set)
+            
+            text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            # Format analysis content
+            content = f"""🔍 CODE ANALYSIS RESULTS
+
+📊 Overall Rating: {result.get('rating', 'N/A')}/10
+📈 Complexity: {result.get('complexity', 'Unknown')}
+
+📝 Analysis:
+{result.get('analysis', 'No analysis provided')}
+
+💡 Suggestions for Improvement:
+"""
+            for i, suggestion in enumerate(result.get('suggestions', []), 1):
+                content += f"{i}. {suggestion}\n"
+            
+            if result.get('issues'):
+                content += f"\n⚠️ Potential Issues:\n"
+                for i, issue in enumerate(result.get('issues', []), 1):
+                    content += f"{i}. {issue}\n"
+            
+            if result.get('improved_code'):
+                content += f"\n✨ Improved Code:\n{result.get('improved_code')}"
+            
+            text_widget.insert(tk.END, content)
+            text_widget.config(state=tk.DISABLED)
+            
+            # Close button
+            ttk.Button(window, text="❌ Close", command=window.destroy).pack(pady=10)
+            
+        except Exception as e:
+            self.logger.error(f"Error showing analysis result: {e}")
+            await self._show_speech_bubble("Error displaying analysis! 😿", duration=3000)
+    
+    async def _show_fix_result_window(self, result: Dict[str, Any]):
+        """Show code fixing results"""
+        try:
+            window = tk.Toplevel(self.root)
+            window.title("Pixie - Code Fix")
+            window.geometry("800x600")
+            window.wm_attributes("-topmost", True)
+            
+            # Create notebook for before/after comparison
+            notebook = ttk.Notebook(window)
+            notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            # Fixed code tab
+            code_frame = ttk.Frame(notebook)
+            notebook.add(code_frame, text="Fixed Code")
+            
+            code_text = tk.Text(code_frame, wrap=tk.NONE, font=('Consolas', 11))
+            code_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            code_text.insert(tk.END, result.get('fixed_code', ''))
+            
+            # Explanation tab
+            exp_frame = ttk.Frame(notebook)
+            notebook.add(exp_frame, text="Explanation")
+            
+            exp_text = tk.Text(exp_frame, wrap=tk.WORD, font=('Segoe UI', 10))
+            exp_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            exp_content = f"""🔧 What was wrong:
+{result.get('explanation', 'No explanation provided')}
+
+🔍 Error Type: {result.get('error_type', 'Unknown')}
+
+💡 Prevention Tips:
+"""
+            for i, tip in enumerate(result.get('prevention_tips', []), 1):
+                exp_content += f"{i}. {tip}\n"
+            
+            if result.get('additional_improvements'):
+                exp_content += f"\n✨ Additional Improvements:\n{result.get('additional_improvements')}"
+            
+            exp_text.insert(tk.END, exp_content)
+            exp_text.config(state=tk.DISABLED)
+            
+            # Button frame
+            button_frame = ttk.Frame(window)
+            button_frame.pack(fill=tk.X, padx=10, pady=5)
+            
+            def copy_fixed_code():
+                window.clipboard_clear()
+                window.clipboard_append(result.get('fixed_code', ''))
+                messagebox.showinfo("Copied", "Fixed code copied to clipboard!")
+            
+            ttk.Button(button_frame, text="📋 Copy Fixed Code", command=copy_fixed_code).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="❌ Close", command=window.destroy).pack(side=tk.RIGHT, padx=5)
+            
+        except Exception as e:
+            self.logger.error(f"Error showing fix result: {e}")
+            await self._show_speech_bubble("Error displaying fix results! 😿", duration=3000)
+    
+    async def _show_test_result_window(self, result: Dict[str, Any]):
+        """Show generated test results"""
+        try:
+            window = tk.Toplevel(self.root)
+            window.title("Pixie - Generated Tests")
+            window.geometry("800x600")
+            window.wm_attributes("-topmost", True)
+            
+            # Create notebook
+            notebook = ttk.Notebook(window)
+            notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            # Test code tab
+            test_frame = ttk.Frame(notebook)
+            notebook.add(test_frame, text="Test Code")
+            
+            test_text = tk.Text(test_frame, wrap=tk.NONE, font=('Consolas', 11))
+            test_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            test_text.insert(tk.END, result.get('test_code', ''))
+            
+            # Instructions tab
+            inst_frame = ttk.Frame(notebook)
+            notebook.add(inst_frame, text="Instructions")
+            
+            inst_text = tk.Text(inst_frame, wrap=tk.WORD, font=('Segoe UI', 10))
+            inst_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            inst_content = f"""🧪 Test Cases Covered:
+"""
+            for i, case in enumerate(result.get('test_cases', []), 1):
+                inst_content += f"{i}. {case}\n"
+            
+            inst_content += f"""
+
+🚀 How to Run Tests:
+{result.get('setup_instructions', 'No instructions provided')}
+
+📦 Dependencies Needed:
+{', '.join(result.get('dependencies', [])) or 'None'}
+
+📁 Suggested Filename:
+{result.get('filename_suggestion', 'test_code.py')}
+
+📊 Coverage Areas:
+"""
+            for area in result.get('coverage_areas', []):
+                inst_content += f"• {area}\n"
+            
+            inst_text.insert(tk.END, inst_content)
+            inst_text.config(state=tk.DISABLED)
+            
+            # Button frame
+            button_frame = ttk.Frame(window)
+            button_frame.pack(fill=tk.X, padx=10, pady=5)
+            
+            def save_tests():
+                if self.file_manager:
+                    filename = result.get('filename_suggestion', 'test_generated.py')
+                    save_result = self.file_manager.create_new_file(filename, result.get('test_code', ''))
+                    if save_result.get('success'):
+                        messagebox.showinfo("Success", f"Tests saved to {save_result['path']}")
+                    else:
+                        messagebox.showerror("Error", f"Failed to save: {save_result.get('error')}")
+                else:
+                    messagebox.showerror("Error", "File manager not available")
+            
+            def copy_tests():
+                window.clipboard_clear()
+                window.clipboard_append(result.get('test_code', ''))
+                messagebox.showinfo("Copied", "Test code copied to clipboard!")
+            
+            ttk.Button(button_frame, text="💾 Save Tests", command=save_tests).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="📋 Copy Tests", command=copy_tests).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="❌ Close", command=window.destroy).pack(side=tk.RIGHT, padx=5)
+            
+        except Exception as e:
+            self.logger.error(f"Error showing test result: {e}")
+            await self._show_speech_bubble("Error displaying test results! 😿", duration=3000)
+    
+    # ===== VS Code Integration Methods =====
+    
+    async def _fix_current_vscode_file(self):
+        """Fix the currently active file in VS Code"""
+        try:
+            if not self.vscode_integration:
+                await self._show_speech_bubble("VS Code integration not available! 😿", duration=3000)
+                return
+            
+            await self._show_speech_bubble("Fixing your current file... 🔧", duration=2000)
+            
+            result = await self.vscode_integration.apply_code_fix(self.gemini_client)
+            
+            if result.get('success'):
+                if result.get('applied'):
+                    message = f"✅ Fixed your file!\n\n{result.get('explanation', 'Code has been improved')}"
+                    if result.get('backup_path'):
+                        message += f"\n\nBackup saved: {Path(result['backup_path']).name}"
+                    
+                    await self._show_speech_bubble(message, duration=5000)
+                else:
+                    await self._show_speech_bubble(f"Found issues but couldn't apply fix: {result.get('edit_error', 'Unknown error')} 😿", duration=4000)
+            else:
+                await self._show_speech_bubble(f"Couldn't fix the file: {result.get('error', 'Unknown error')} 😿", duration=4000)
+                
+        except Exception as e:
+            self.logger.error(f"Error fixing VS Code file: {e}")
+            await self._show_speech_bubble("Something went wrong fixing your file! 😿", duration=3000)
+    
+    async def _analyze_current_vscode_file(self):
+        """Analyze the currently active file in VS Code"""
+        try:
+            if not self.vscode_integration:
+                await self._show_speech_bubble("VS Code integration not available! 😿", duration=3000)
+                return
+            
+            await self._show_speech_bubble("Analyzing your current file... 🔍", duration=2000)
+            
+            result = await self.vscode_integration.suggest_improvements_for_current_file(self.gemini_client)
+            
+            if result.get('success'):
+                await self._show_analysis_result_window(result)
+            else:
+                await self._show_speech_bubble(f"Couldn't analyze your file: {result.get('error', 'Unknown error')} 😿", duration=4000)
+                
+        except Exception as e:
+            self.logger.error(f"Error analyzing VS Code file: {e}")
+            await self._show_speech_bubble("Something went wrong analyzing your file! 😿", duration=3000)
+    
+    async def _generate_tests_for_current_file(self):
+        """Generate tests for the currently active file in VS Code"""
+        try:
+            if not self.vscode_integration:
+                await self._show_speech_bubble("VS Code integration not available! 😿", duration=3000)
+                return
+            
+            await self._show_speech_bubble("Creating tests for your file... 🧪", duration=2000)
+            
+            result = await self.vscode_integration.create_companion_file(self.gemini_client, 'test')
+            
+            if result.get('success'):
+                message = "✅ Tests created!"
+                if result.get('companion_file'):
+                    message += f"\n\nSaved as: {Path(result['companion_file']).name}"
+                await self._show_speech_bubble(message, duration=4000)
+                await self._show_test_result_window(result)
+            else:
+                await self._show_speech_bubble(f"Couldn't create tests: {result.get('error', 'Unknown error')} 😿", duration=4000)
+                
+        except Exception as e:
+            self.logger.error(f"Error generating tests for VS Code file: {e}")
+            await self._show_speech_bubble("Something went wrong creating tests! 😿", duration=3000)
+    
+    async def _show_speech_bubble(self, message: str, duration: int = 3000):
+        """Show a speech bubble message near the pet"""
+        try:
+            if hasattr(self, 'speech_bubble') and self.speech_bubble:
+                self.speech_bubble.show_message(message, duration)
+            elif ModernSpeechBubble and self.root:
+                # Create temporary speech bubble
+                bubble = ModernSpeechBubble(self.root)
+                pet_x = self.pet_window.winfo_x() if self.pet_window else 100
+                pet_y = self.pet_window.winfo_y() if self.pet_window else 100
+                bubble.show_message(message, duration, pet_x + 50, pet_y - 50)
+            else:
+                # Fallback to simple messagebox
+                self.root.after(100, lambda: messagebox.showinfo("Pixie", message))
+        except Exception as e:
+            self.logger.error(f"Error showing speech bubble: {e}")
+            # Ultimate fallback - just log the message
+            self.logger.info(f"Pixie says: {message}")
