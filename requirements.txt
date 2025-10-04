@@ -13,3 +13,8 @@ pygetwindow==0.0.9
 win32gui==221
 pywin32==306
 watchdog==3.0.0
+
+# Web interface dependencies (optional)
+flask==2.3.3
+flask-cors==4.0.0
+gunicorn==21.2.0

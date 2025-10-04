@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Pet AI Assistant - Interactive Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            max-width: 800px;
+            width: 90%;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 2.5rem;
+        }
+        
+        .chat-container {
+            height: 400px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 1rem;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .message {
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            border-radius: 10px;
+            max-width: 80%;
+        }
+        
+        .user-message {
+            background: rgba(102, 126, 234, 0.8);
+            margin-left: auto;
+            text-align: right;
+        }
+        
+        .ai-message {
+            background: rgba(118, 75, 162, 0.8);
+            margin-right: auto;
+        }
+        
+        .input-container {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        input[type="text"] {
+            flex: 1;
+            padding: 1rem;
+            border: none;
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 1rem;
+        }
+        
+        input[type="text"]::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        button {
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 25px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .status {
+            text-align: center;
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 10px;
+            background: rgba(16, 185, 129, 0.3);
+        }
+        
+        .pet-display {
+            text-align: center;
+            font-size: 4rem;
+            margin: 1rem 0;
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐱 Virtual Pet AI Assistant</h1>
+        <div class="pet-display">🤖</div>
+        
+        <div class="chat-container" id="chatContainer">
+            <div class="message ai-message">
+                Hello! I'm your virtual pet AI assistant. Ask me anything about your screen, get coding help, or just chat!
+            </div>
+        </div>
+        
+        <div class="input-container">
+            <input type="text" id="messageInput" placeholder="Type your message here..." />
+            <button onclick="sendMessage()">Send</button>
+        </div>
+        
+        <div class="loading" id="loading">🤔 Thinking...</div>
+        <div class="status">✅ AI Assistant Ready</div>
+    </div>
+
+    <script>
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const chatContainer = document.getElementById('chatContainer');
+            const loading = document.getElementById('loading');
+            
+            const message = input.value.trim();
+            if (!message) return;
+            
+            // Add user message
+            const userDiv = document.createElement('div');
+            userDiv.className = 'message user-message';
+            userDiv.textContent = message;
+            chatContainer.appendChild(userDiv);
+            
+            // Clear input
+            input.value = '';
+            
+            // Show loading
+            loading.style.display = 'block';
+            
+            // Scroll to bottom
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+                
+                const data = await response.json();
+                
+                // Hide loading
+                loading.style.display = 'none';
+                
+                // Add AI response
+                const aiDiv = document.createElement('div');
+                aiDiv.className = 'message ai-message';
+                
+                if (data.success) {
+                    aiDiv.textContent = data.response;
+                } else {
+                    aiDiv.textContent = 'Sorry, I encountered an error: ' + data.error;
+                }
+                
+                chatContainer.appendChild(aiDiv);
+                
+            } catch (error) {
+                loading.style.display = 'none';
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'message ai-message';
+                errorDiv.textContent = 'Sorry, I could not connect to the AI service.';
+                chatContainer.appendChild(errorDiv);
+            }
+            
+            // Scroll to bottom
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // Allow Enter key to send message
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

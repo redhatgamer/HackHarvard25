@@ -7,8 +7,8 @@
       "height": 120
     },
     "position": {
-      "x": 825,
-      "y": 288
+      "x": 916,
+      "y": 297
     },
     "animations": {
       "idle": "assets/pet/idle.gif",
@@ -23,8 +23,8 @@
       "particle_effects": true,
       "smooth_animations": true
     },
-    "width": 230,
-    "height": 230
+    "width": 270,
+    "height": 270
   },
   "ai": {
     "model": "gemini-2.0-flash-exp",

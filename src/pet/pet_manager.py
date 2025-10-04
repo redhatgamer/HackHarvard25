@@ -14,12 +14,13 @@ from PIL import Image, ImageTk
 
 # Import modern UI components
 try:
-    from src.ui.modern_components import ModernPetWidget, ModernChatWindow, ModernContextMenu
+    from src.ui.modern_components import ModernPetWidget, ModernChatWindow, ModernContextMenu, ModernSpeechBubble
 except ImportError:
     # Fallback if modern components aren't available
     ModernPetWidget = None
     ModernChatWindow = None
     ModernContextMenu = None
+    ModernSpeechBubble = None
 
 class PetManager:
     """Main manager for the vir    def _resize_bigger(self):
@@ -66,11 +67,13 @@ class PetManager:
         self.root = None
         self.pet_window = None
         self.chat_window = None
+        self.speech_bubble = None
         self.is_running = False
         
         # State
         self.current_context = None
         self.chat_history = []
+        self.conversation_messages = []  # Store conversation for speech bubbles
         
         # Drag state for smooth dragging
         self.dragging = False
@@ -161,6 +164,16 @@ class PetManager:
         
         # Create modern pet display
         await self._setup_modern_pet_display()
+        
+        # Initialize speech bubble system
+        if ModernSpeechBubble:
+            self.speech_bubble = ModernSpeechBubble(
+                self.pet_window, 
+                pet_size=(size["width"], size["height"])
+            )
+            
+            # Initialize conversation with some sample messages
+            self._initialize_conversation_messages()
         
         # Bind window-level events for dragging
         self.pet_window.bind("<Button-3>", self._on_pet_right_click)
@@ -321,13 +334,49 @@ class PetManager:
             pass
         
         if not self.dragging and time.time() - self.click_time < 0.3:
-            # This was a click, not a drag
-            asyncio.create_task(self._open_chat_interface())
+            # This was a click, not a drag - show speech bubble instead of chat
+            asyncio.create_task(self._show_pet_message())
         elif self.dragging:
             # Save the new position immediately (hot-reload ignores position-only changes)
             self._save_pet_position()
         
         self.dragging = False
+    
+    def _initialize_conversation_messages(self):
+        """Initialize conversation messages for the pet"""
+        self.conversation_messages = [
+            "Hi! I'm Pixie! 🐱✨",
+            "I'm here to help you! 💫",
+            "What are you working on? 🤔",
+            "I can see your screen and help! 👀",
+            "Click me again for more! 😊",
+            "I love being your assistant! ❤️",
+            "Let me know if you need help! 🚀",
+            "I'm always watching over you! 👁️",
+            "Your productivity buddy is here! 💪",
+            "Ready for some AI magic? ✨",
+            "Double-click me for screen analysis! 🔍",
+            "Right-click for more options! 📋",
+            "I can help with any questions! 🤓",
+            "Your virtual companion at work! 💼",
+            "I'm learning about your workflow! 📊"
+        ]
+        self.message_index = 0
+    
+    async def _show_pet_message(self):
+        """Show a speech bubble message from the pet"""
+        if not self.speech_bubble or not self.conversation_messages:
+            return
+        
+        # Get next message in rotation
+        message = self.conversation_messages[self.message_index]
+        self.message_index = (self.message_index + 1) % len(self.conversation_messages)
+        
+        # Show the message with typing effect
+        self.speech_bubble.show_message(message, duration=4000, typing_effect=True)
+        
+        # Log the interaction
+        self.logger.info(f"Pet said: {message}")
     
     def _on_pet_double_click(self, event):
         """Handle double-click - quick screen analysis"""
@@ -372,7 +421,8 @@ class PetManager:
         if ModernContextMenu:
             # Use modern context menu
             menu_options = [
-                ("💬 Chat with Pixie", lambda: asyncio.create_task(self._open_chat_interface())),
+                ("💬 Open Full Chat Window", lambda: asyncio.create_task(self._open_chat_interface())),
+                ("💭 Say Something", lambda: asyncio.create_task(self._show_pet_message())),
                 ("📸 Take Screenshot & Analyze", lambda: asyncio.create_task(self._analyze_current_screen())),
                 "---",  # Separator
                 ("🔍 Make Bigger", self._resize_bigger),
@@ -574,18 +624,25 @@ class PetManager:
                 context=context
             )
             
-            # If chat window is open, add the analysis
-            if self.chat_window and self.chat_window.winfo_exists():
+            # Show analysis in speech bubble if available, otherwise use chat/popup
+            if self.speech_bubble:
+                # Truncate analysis for speech bubble display
+                short_analysis = analysis[:100] + "..." if len(analysis) > 100 else analysis
+                self.speech_bubble.show_message(f"📸 {short_analysis}", duration=6000, typing_effect=True)
+            elif self.chat_window and self.chat_window.winfo_exists():
                 self._add_chat_message("Pixie", f"📸 I can see your screen! Here's what I notice:\n\n{analysis}")
             else:
-                # Show in a popup
+                # Show in a popup as last resort
                 messagebox.showinfo("Screen Analysis", analysis)
             
         except Exception as e:
             self.logger.error(f"Error analyzing screen: {e}")
             error_msg = "I'm having trouble seeing your screen right now. Please try again! 🐱"
             
-            if self.chat_window and self.chat_window.winfo_exists():
+            # Show error in speech bubble if available
+            if self.speech_bubble:
+                self.speech_bubble.show_message(error_msg, duration=4000, typing_effect=True)
+            elif self.chat_window and self.chat_window.winfo_exists():
                 self._add_chat_message("Pixie", error_msg)
             else:
                 messagebox.showerror("Error", error_msg)

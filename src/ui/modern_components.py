@@ -471,6 +471,317 @@ class ModernPetWidget:
             self.parent.after_cancel(self.animation_timer)
 
 
+class ModernSpeechBubble:
+    """Modern speech bubble that appears next to the pet"""
+    
+    def __init__(self, parent, pet_size: tuple = (120, 120)):
+        self.parent = parent
+        self.pet_size = pet_size
+        self.bubble_window = None
+        self.current_message = ""
+        self.auto_hide_timer = None
+        self.typing_timer = None
+        self.typed_text = ""
+        self.typing_index = 0
+        self.is_visible = False
+        
+        # Animation state
+        self.fade_alpha = 0.0
+        self.target_alpha = 0.0
+        self.fade_timer = None
+        
+        # Position tracking
+        self.position_timer = None
+        self.last_pet_x = 0
+        self.last_pet_y = 0
+        self.is_tracking = False
+        
+    def show_message(self, message: str, duration: int = 5000, typing_effect: bool = True):
+        """Show a speech bubble with the given message"""
+        self.current_message = message
+        self.is_visible = True
+        
+        # Create or update bubble window
+        self._create_bubble_window()
+        self._position_bubble()
+        
+        if typing_effect:
+            self._start_typing_effect()
+        else:
+            self.typed_text = message
+            self._update_bubble_content()
+        
+        # Show with fade-in animation
+        self.target_alpha = 0.95
+        self._start_fade_animation()
+        
+        # Start position tracking to follow the pet
+        self._start_position_tracking()
+        
+        # Auto-hide after duration
+        if self.auto_hide_timer:
+            self.parent.after_cancel(self.auto_hide_timer)
+        self.auto_hide_timer = self.parent.after(duration, self.hide)
+    
+    def hide(self):
+        """Hide the speech bubble with fade-out animation"""
+        if not self.is_visible:
+            return
+            
+        # Stop position tracking
+        self._stop_position_tracking()
+            
+        self.target_alpha = 0.0
+        self._start_fade_animation()
+        
+        # Actually destroy after fade animation
+        self.parent.after(300, self._destroy_bubble)
+    
+    def _create_bubble_window(self):
+        """Create the speech bubble window"""
+        if self.bubble_window:
+            self.bubble_window.destroy()
+        
+        # Create toplevel window
+        self.bubble_window = tk.Toplevel(self.parent)
+        self.bubble_window.overrideredirect(True)  # Remove window decorations
+        self.bubble_window.wm_attributes("-topmost", True)
+        self.bubble_window.wm_attributes("-transparentcolor", "#000001")
+        
+        # Create canvas for drawing bubble
+        self.canvas = tk.Canvas(
+            self.bubble_window,
+            width=300,
+            height=120,
+            highlightthickness=0,
+            bg='#000001',
+            bd=0
+        )
+        self.canvas.pack()
+        
+        # Draw bubble background
+        self._draw_bubble_background()
+    
+    def _draw_bubble_background(self):
+        """Draw the speech bubble background with modern styling"""
+        # Bubble dimensions
+        bubble_width = 280
+        bubble_height = 80
+        bubble_x = 10
+        bubble_y = 10
+        corner_radius = 15
+        
+        # Create rounded rectangle for bubble
+        self._create_rounded_rectangle(
+            bubble_x, bubble_y, 
+            bubble_x + bubble_width, bubble_y + bubble_height,
+            corner_radius, fill='#ffffff', outline='#e1e5e9', width=2
+        )
+        
+        # Add subtle shadow effect
+        shadow_offset = 2
+        self._create_rounded_rectangle(
+            bubble_x + shadow_offset, bubble_y + shadow_offset,
+            bubble_x + bubble_width + shadow_offset, bubble_y + bubble_height + shadow_offset,
+            corner_radius, fill='#d0d0d0', outline='', stipple='gray25'
+        )
+        
+        # Draw pointer/tail pointing to pet
+        tail_points = [
+            bubble_x + 30, bubble_y + bubble_height,
+            bubble_x + 20, bubble_y + bubble_height + 15,
+            bubble_x + 45, bubble_y + bubble_height
+        ]
+        self.canvas.create_polygon(tail_points, fill='#ffffff', outline='#e1e5e9', width=2)
+        
+        # Create text area
+        self.text_id = self.canvas.create_text(
+            bubble_x + bubble_width // 2, bubble_y + bubble_height // 2,
+            text="", font=("Segoe UI", 10), fill='#2c3e50',
+            width=bubble_width - 20, justify='left', anchor='center'
+        )
+    
+    def _create_rounded_rectangle(self, x1, y1, x2, y2, radius, **kwargs):
+        """Create a rounded rectangle on the canvas"""
+        points = []
+        
+        # Top-left corner
+        for i in range(90, 180, 10):
+            x = x1 + radius - radius * math.cos(math.radians(i))
+            y = y1 + radius - radius * math.sin(math.radians(i))
+            points.extend([x, y])
+        
+        # Top-right corner
+        for i in range(0, 90, 10):
+            x = x2 - radius + radius * math.cos(math.radians(i))
+            y = y1 + radius - radius * math.sin(math.radians(i))
+            points.extend([x, y])
+        
+        # Bottom-right corner
+        for i in range(270, 360, 10):
+            x = x2 - radius + radius * math.cos(math.radians(i))
+            y = y2 - radius + radius * math.sin(math.radians(i))
+            points.extend([x, y])
+        
+        # Bottom-left corner
+        for i in range(180, 270, 10):
+            x = x1 + radius - radius * math.cos(math.radians(i))
+            y = y2 - radius + radius * math.sin(math.radians(i))
+            points.extend([x, y])
+        
+        return self.canvas.create_polygon(points, smooth=True, **kwargs)
+    
+    def _position_bubble(self):
+        """Position the bubble relative to the pet"""
+        if not self.bubble_window:
+            return
+            
+        # Get pet window position
+        pet_x = self.parent.winfo_x()
+        pet_y = self.parent.winfo_y()
+        
+        # Position bubble to the right and slightly above the pet
+        bubble_x = pet_x + self.pet_size[0] + 10
+        bubble_y = pet_y - 30
+        
+        # Make sure bubble stays on screen
+        screen_width = self.parent.winfo_screenwidth()
+        screen_height = self.parent.winfo_screenheight()
+        
+        # Adjust if bubble would go off-screen
+        if bubble_x + 300 > screen_width:
+            bubble_x = pet_x - 310  # Position to the left instead
+        if bubble_y < 0:
+            bubble_y = pet_y + 20
+        if bubble_y + 120 > screen_height:
+            bubble_y = screen_height - 140
+        
+        self.bubble_window.geometry(f"300x120+{bubble_x}+{bubble_y}")
+    
+    def _start_typing_effect(self):
+        """Start the typing animation effect"""
+        self.typed_text = ""
+        self.typing_index = 0
+        self._continue_typing()
+    
+    def _continue_typing(self):
+        """Continue the typing animation"""
+        if self.typing_index < len(self.current_message):
+            self.typed_text += self.current_message[self.typing_index]
+            self.typing_index += 1
+            self._update_bubble_content()
+            
+            # Schedule next character (varies speed for more natural effect)
+            delay = 30 if self.current_message[self.typing_index - 1] in '.,!?' else 50
+            self.typing_timer = self.parent.after(delay, self._continue_typing)
+        else:
+            # Typing complete, add a subtle cursor blink effect briefly
+            self.parent.after(100, lambda: self._update_bubble_content())
+    
+    def _update_bubble_content(self):
+        """Update the bubble text content"""
+        if self.bubble_window and self.text_id:
+            display_text = self.typed_text
+            # Add typing cursor if still typing
+            if self.typing_index < len(self.current_message) and len(display_text) > 0:
+                display_text += "|"
+            
+            self.canvas.itemconfig(self.text_id, text=display_text)
+    
+    def _start_fade_animation(self):
+        """Start fade in/out animation"""
+        self._continue_fade_animation()
+    
+    def _continue_fade_animation(self):
+        """Continue fade animation"""
+        if not self.bubble_window:
+            return
+            
+        # Smooth animation towards target
+        fade_speed = 0.05
+        if abs(self.fade_alpha - self.target_alpha) > 0.01:
+            if self.fade_alpha < self.target_alpha:
+                self.fade_alpha += fade_speed
+            else:
+                self.fade_alpha -= fade_speed
+            
+            # Apply alpha to window
+            try:
+                self.bubble_window.wm_attributes("-alpha", self.fade_alpha)
+            except:
+                pass
+            
+            # Continue animation
+            self.fade_timer = self.parent.after(16, self._continue_fade_animation)  # ~60fps
+        else:
+            self.fade_alpha = self.target_alpha
+            try:
+                self.bubble_window.wm_attributes("-alpha", self.fade_alpha)
+            except:
+                pass
+    
+    def _destroy_bubble(self):
+        """Destroy the bubble window"""
+        self.is_visible = False
+        self._stop_position_tracking()
+        if self.auto_hide_timer:
+            self.parent.after_cancel(self.auto_hide_timer)
+        if self.typing_timer:
+            self.parent.after_cancel(self.typing_timer)
+        if self.fade_timer:
+            self.parent.after_cancel(self.fade_timer)
+        if self.bubble_window:
+            self.bubble_window.destroy()
+            self.bubble_window = None
+    
+    def _start_position_tracking(self):
+        """Start tracking the pet's position to follow it"""
+        if self.is_tracking:
+            return
+            
+        self.is_tracking = True
+        # Store initial position
+        try:
+            self.last_pet_x = self.parent.winfo_x()
+            self.last_pet_y = self.parent.winfo_y()
+        except:
+            self.last_pet_x = 0
+            self.last_pet_y = 0
+        
+        self._track_position()
+    
+    def _stop_position_tracking(self):
+        """Stop position tracking"""
+        self.is_tracking = False
+        if self.position_timer:
+            self.parent.after_cancel(self.position_timer)
+            self.position_timer = None
+    
+    def _track_position(self):
+        """Continuously track pet position and update bubble location"""
+        if not self.is_tracking or not self.bubble_window:
+            return
+        
+        try:
+            # Get current pet position
+            current_x = self.parent.winfo_x()
+            current_y = self.parent.winfo_y()
+            
+            # Check if position has changed
+            if current_x != self.last_pet_x or current_y != self.last_pet_y:
+                # Update bubble position to follow the pet
+                self._position_bubble()
+                self.last_pet_x = current_x
+                self.last_pet_y = current_y
+            
+            # Schedule next position check
+            self.position_timer = self.parent.after(50, self._track_position)  # Check every 50ms
+            
+        except Exception as e:
+            # If there's an error, stop tracking
+            self.is_tracking = False
+
+
 class ModernChatWindow:
     """Modern chat window with glassmorphism and smooth animations"""
     
