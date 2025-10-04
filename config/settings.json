@@ -3,8 +3,8 @@
     "name": "Pixie",
     "personality": "helpful and friendly",
     "size": {
-      "width": 100,
-      "height": 100
+      "width": 120,
+      "height": 120
     },
     "position": {
       "x": -1,
@@ -13,7 +13,15 @@
     "animations": {
       "idle": "assets/pet/idle.gif",
       "thinking": "assets/pet/thinking.gif",
-      "speaking": "assets/pet/speaking.gif"
+      "speaking": "assets/pet/speaking.gif",
+      "enabled": true,
+      "fps": 20
+    },
+    "modern_ui": {
+      "enabled": true,
+      "glow_effect": true,
+      "particle_effects": true,
+      "smooth_animations": true
     }
   },
   "ai": {
@@ -43,8 +51,21 @@
     ]
   },
   "ui": {
-    "transparency": 0.9,
+    "transparency": 0.95,
     "always_on_top": true,
-    "click_through": false
+    "click_through": false,
+    "theme": "modern",
+    "color_scheme": {
+      "primary": "#667eea",
+      "secondary": "#48c78e",
+      "accent": "#FF69B4",
+      "background": "#f8f9fa",
+      "text": "#2c3e50"
+    },
+    "effects": {
+      "hover_animations": true,
+      "fade_transitions": true,
+      "glassmorphism": true
+    }
   }
 }

@@ -12,3 +12,4 @@ python-dotenv==1.0.0
 pygetwindow==0.0.9
 win32gui==221
 pywin32==306
+watchdog==3.0.0

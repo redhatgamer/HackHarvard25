@@ -1,0 +1,1 @@
+"""Modern UI module for the Virtual Pet AI Assistant"""

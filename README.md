@@ -4,16 +4,34 @@ A delightful AI-powered virtual pet that watches your screen and helps you with 
 
 ## ✨ Features
 
-- **Screen Awareness**: Captures and analyzes your screen content
+### 🎨 **Modern UI & Animations**
+- **Glassmorphism Design**: Beautiful translucent interface with modern styling
+- **Smooth Animations**: Breathing effects, particle systems, and hover animations
+- **Emotional Expressions**: Pet shows different emotions (happy, thinking, excited, etc.)
+- **Visual Effects**: Glow effects, ripples, and magical particle bursts
+- **Responsive Design**: Adapts to different screen sizes and resolutions
+
+### 🤖 **AI-Powered Intelligence**
+- **Screen Awareness**: Captures and analyzes your screen content in real-time
 - **Context-Aware AI**: Understands what application you're using and provides relevant help
-- **Virtual Pet Interface**: Adorable pet character that lives on your screen
 - **Multi-Application Support**: 
   - VS Code: Code assistance, debugging tips, suggestions
   - Excel/Spreadsheets: Formula help, data analysis tips
   - Web Browsers: Research assistance, content summaries
   - And much more!
-- **Voice & Text Interaction**: Communicate with your pet through typing or speech
+
+### 🎮 **Interactive Pet Experience**
+- **Animated Virtual Pet**: Adorable pet character with lifelike animations
+- **Voice & Text Interaction**: Communicate through typing or speech
+- **Drag & Drop**: Move your pet anywhere on screen
+- **Context Menus**: Modern right-click menus with smooth animations
+- **Activity Indicators**: Visual feedback when Pixie is thinking or working
+
+### 🔒 **Privacy & Customization**
 - **Privacy Focused**: All processing respects your privacy settings
+- **Themeable**: Customizable colors, fonts, and visual effects
+- **Configurable**: Adjust transparency, animations, and behavior
+- **Lightweight**: Minimal resource usage with efficient animations
 
 ## 🚀 Getting Started
 
