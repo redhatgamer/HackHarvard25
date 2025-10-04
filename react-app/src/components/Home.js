@@ -73,21 +73,19 @@ const Home = () => {
           <div className="tape tape-bottom-right animated-tape"></div>
           <div className="gradient-overlay"></div>
           
-          <div className="hero-content">
+          <div className="hero-layout">
+            <div className="hero-content">
             <div className="hero-title-wrapper">
               <h1 className="hero-title cardboard-text animated-title">
                 <span className="letter">H</span>
                 <span className="letter">I</span>
                 <span className="letter">R</span>
                 <span className="letter">O</span>
-                <span className="letter">N</span>
-                <span className="letter">O</span>
               </h1>
-              <p className="hero-subtitle marker-text fade-in-up">ヒロノ - Your AI Companion</p>
               <div className="title-underline animated-underline"></div>
             </div>
             <p className="hero-description handwritten-text fade-in-up-delayed">
-              Experience the magic of virtual companionship with Hirono, 
+              Experience the magic of virtual companionship with Hiro, 
               an intelligent desktop pet that brings joy and assistance to your daily routine.
             </p>
             <div className="hero-buttons staggered-buttons">
@@ -108,6 +106,22 @@ const Home = () => {
             </div>
           </div>
           
+          <div className="hero-image-section">
+            <div className="mark-image-container cardboard-frame">
+              <div className="frame-corners animated-corners">
+                <div className="corner top-left"></div>
+                <div className="corner top-right"></div>
+                <div className="corner bottom-left"></div>
+                <div className="corner bottom-right"></div>
+              </div>
+              <img src="/mark.jpg" alt="Hiro Figure Inspiration" className="mark-image hover-zoom" />
+              <div className="image-caption handwritten-text">
+                Inspired by Hirono figures
+              </div>
+            </div>
+          </div>
+        </div>
+          
           <div className="hero-visual enhanced-visual">
             <div className="pet-showcase cardboard-frame floating-card">
               <div className="frame-corners animated-corners">
@@ -117,7 +131,7 @@ const Home = () => {
                 <div className="corner bottom-right"></div>
               </div>
               <div className="image-container">
-                <img src="/api/placeholder/300/300" alt="Hirono Pet" className="pet-image hover-zoom" />
+                <img src="/api/placeholder/300/300" alt="Hiro Pet" className="pet-image hover-zoom" />
                 <div className="image-overlay gradient-shine"></div>
               </div>
               <div className="showcase-effects">
@@ -142,58 +156,83 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Tech Stack Section */}
-      <section className={`tech-stack animate-section ${isVisible['techstack'] ? 'visible' : ''}`} id="techstack">
+      {/* Tech Workspace Section */}
+      <section className={`tech-workspace animate-section ${isVisible['techstack'] ? 'visible' : ''}`} id="techstack">
         <div className="container">
-          <div className="section-header cardboard-label">
-            <h2 className="section-title marker-title">Built with Modern Technology</h2>
-            <div className="label-pin"></div>
-          </div>
-          
-          <div className="tech-grid">
-            {techStack.map((tech, index) => (
-              <div 
-                key={index}
-                className={`tech-card ${activeFeature === index ? 'active' : ''}`}
-                onMouseEnter={() => setActiveFeature(index)}
-                style={{ 
-                  animationDelay: `${index * 0.2}s`,
-                  '--tech-color': tech.color 
-                }}
-              >
-                <div className="card-header">
-                  <div className="tech-logo-container">
-                    <img 
-                      src={tech.logo} 
-                      alt={`${tech.title} logo`} 
-                      className="tech-logo"
-                      style={{ '--tech-color': tech.color }}
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                        e.target.nextSibling.style.display = 'block';
-                      }}
-                    />
-                    <div className="tech-fallback" style={{ display: 'none', fontSize: '3.5rem' }}>
-                      {tech.fallback}
+          <div className="workspace-board">
+            <div className="board-header">
+              <h2 className="workspace-title handwritten-title">HIRO's Tech Stack</h2>
+              <div className="board-pins">
+                <div className="pin red-pin"></div>
+                <div className="pin blue-pin"></div>
+                <div className="pin green-pin"></div>
+              </div>
+            </div>
+            
+            <div className="tech-cards-workspace">
+              {techStack.map((tech, index) => (
+                <div 
+                  key={index}
+                  className={`tech-spec-card ${activeFeature === index ? 'active' : ''}`}
+                  onMouseEnter={() => setActiveFeature(index)}
+                  style={{ 
+                    '--rotation': `${(index % 2 === 0 ? 1 : -1) * (Math.random() * 3 + 1)}deg`,
+                    '--tech-color': tech.color 
+                  }}
+                >
+                  <div className="card-pin"></div>
+                  
+                  <div className="spec-header">
+                    <div className="tech-icon-wrapper">
+                      <img 
+                        src={tech.logo} 
+                        alt={`${tech.title} logo`} 
+                        className="tech-logo"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
+                      />
+                      <div className="tech-fallback" style={{ display: 'none' }}>
+                        {tech.fallback}
+                      </div>
+                    </div>
+                    <h3 className="spec-title">{tech.title}</h3>
+                    <div className="spec-category" style={{ color: tech.color }}>
+                      {index === 0 ? "Frontend Framework" : 
+                       index === 1 ? "Backend Language" :
+                       index === 2 ? "AI Integration" : "UI Framework"}
                     </div>
                   </div>
-                  <h3 className="tech-title">{tech.title}</h3>
-                </div>
-                
-                <div className="card-body">
-                  <p className="tech-description">{tech.desc}</p>
-                </div>
-                
-                <div className="card-footer">
-                  <div className="tech-badge" style={{ backgroundColor: tech.color }}>
-                    Technology
+                  
+                  <div className="spec-content">
+                    <p className="spec-description">{tech.desc}</p>
+                    
+                    <div className="spec-features">
+                      <span className="feature-tag">
+                        {index === 0 ? "⚛️ Component-Based" :
+                         index === 1 ? "🐍 AI-Ready" :
+                         index === 2 ? "🤖 Smart Chat" : "🖥️ Cross-Platform"}
+                      </span>
+                    </div>
                   </div>
+                  
+                  <div className="card-tape tape-corner"></div>
                 </div>
-                
-                <div className="card-corner-tape"></div>
-                <div className="card-shadow"></div>
+              ))}
+            </div>
+            
+            <div className="workspace-notes">
+              <div className="sticky-note yellow" style={{ '--rotation': '2deg' }}>
+                <p>🚀 Fast & Responsive</p>
               </div>
-            ))}
+              <div className="sticky-note pink" style={{ '--rotation': '-1deg' }}>
+                <p>🔧 Easy to Maintain</p>
+              </div>
+              <div className="sticky-note green" style={{ '--rotation': '3deg' }}>
+                <p>🎨 Beautiful UI</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>

@@ -4,63 +4,62 @@ const Shop = () => {
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [hoveredItem, setHoveredItem] = useState(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-  const companions = [
+  // Image gallery data
+  const imageGallery = [
     {
       id: 1,
-      name: "Hirono Classic",
-      price: "Free",
-      description: "The original Hirono experience with classic animations and gentle personality.",
-      features: ["Basic AI responses", "Classic animations", "Daily interactions", "Mood system"],
-      image: "/api/placeholder/250/250",
-      category: "classic"
+      src: "/house.png",
+      title: "Cozy Home Companion",
+      subtitle: "Domestic Bliss",
+      description: "Transform your living space into a warm, welcoming sanctuary with Hiro's home-focused personality. Perfect for managing daily routines, organizing your space, and creating a cozy atmosphere.",
+      features: ["Home organization tips", "Recipe suggestions", "Daily routine management", "Cozy conversation"],
+      mood: "Warm & Nurturing",
+      color: "#8B4513"
     },
     {
       id: 2,
-      name: "Hirono Pixel",
-      price: "$4.99",
-      description: "Retro-styled companion with 8-bit charm and nostalgic gaming references.",
-      features: ["Pixel art style", "Retro sound effects", "Gaming references", "Achievement system"],
-      image: "/api/placeholder/250/250",
-      category: "retro"
+      src: "/ghost.png",
+      title: "Mystical Realm Companion",
+      subtitle: "Supernatural Wisdom",
+      description: "Dive into the mysteries of the unknown with Hiro's mystical side. Explore paranormal tales, ancient wisdom, and supernatural insights that spark curiosity and wonder.",
+      features: ["Mystery storytelling", "Paranormal knowledge", "Mystical guidance", "Dream interpretation"],
+      mood: "Mysterious & Wise",
+      color: "#4A148C"
     },
     {
       id: 3,
-      name: "Hirono Zen",
-      price: "$6.99",
-      description: "Peaceful meditation companion focused on mindfulness and relaxation.",
-      features: ["Meditation guides", "Breathing exercises", "Calming animations", "Zen quotes"],
-      image: "/api/placeholder/250/250",
-      category: "wellness"
-    },
-    {
-      id: 4,
-      name: "Hirono Scholar",
-      price: "$7.99",
-      description: "Academic-focused companion that helps with learning and productivity.",
-      features: ["Study timer", "Knowledge base", "Quiz games", "Progress tracking"],
-      image: "/api/placeholder/250/250",
-      category: "education"
-    },
-    {
-      id: 5,
-      name: "Hirono Artist",
-      price: "$8.99",
-      description: "Creative companion that inspires artistic expression and creativity.",
-      features: ["Drawing prompts", "Color theory tips", "Art history facts", "Creative challenges"],
-      image: "/api/placeholder/250/250",
-      category: "creative"
-    },
-    {
-      id: 6,
-      name: "Hirono Premium",
-      price: "$12.99",
-      description: "The ultimate Hirono experience with all features and exclusive content.",
-      features: ["All companion styles", "Premium animations", "Exclusive dialogues", "Priority support"],
-      image: "/api/placeholder/250/250",
-      category: "premium"
+      src: "/clock.png",
+      title: "Time Master Companion",
+      subtitle: "Productivity Focused",
+      description: "Master the art of time management with Hiro's precision-focused personality. Boost your productivity, track goals, and make every moment count towards your success.",
+      features: ["Time optimization", "Goal tracking", "Focus sessions", "Productivity analytics"],
+      mood: "Efficient & Motivating",
+      color: "#1565C0"
     }
   ];
+
+  // Manual navigation functions
+  const nextImage = () => {
+    setCurrentImageIndex((prevIndex) => 
+      (prevIndex + 1) % imageGallery.length
+    );
+  };
+
+  const prevImage = () => {
+    setCurrentImageIndex((prevIndex) => 
+      prevIndex === 0 ? imageGallery.length - 1 : prevIndex - 1
+    );
+  };
+
+  const goToImage = (index) => {
+    setCurrentImageIndex(index);
+  };
+
+  const getCurrentImage = () => {
+    return imageGallery[currentImageIndex];
+  };
 
   const addToCart = (companion) => {
     if (companion.price === "Free") return;
@@ -102,19 +101,17 @@ const Shop = () => {
     setIsCartOpen(!isCartOpen);
   };
 
-  // Simplified companions data
-  const displayCompanions = companions.slice(0, 4); // Show only first 4 for simplicity
-
   return (
-    <div className="shop simple-depth">
-      {/* Simplified Header */}
-      <div className="shop-header depth-layer-1">
+    <div className="shop image-gallery-shop">
+      {/* Header */}
+      <div className="shop-header">
         <div className="container">
           <div className="header-content">
-            <h1 className="shop-title">Digital Companions</h1>
-            <p className="shop-subtitle">Choose your perfect AI companion</p>
-            
-            <div className="cart-toggle simple-button" onClick={toggleCart}>
+            <h1 className="shop-title">
+              <span className="title-main">Hiro's World</span>
+              <span className="title-subtitle">Discover Different Companion Personalities</span>
+            </h1>
+            <div className="cart-toggle" onClick={toggleCart}>
               <i className="fas fa-shopping-cart"></i>
               <span className="cart-badge">{cart.length}</span>
             </div>
@@ -122,63 +119,91 @@ const Shop = () => {
         </div>
       </div>
 
-      {/* Simple Product Grid */}
-      <div className="shop-content depth-layer-2">
-        <div className="container">            
-          <div className="products-grid">
-            {displayCompanions.map((companion, index) => (
-              <div 
-                key={companion.id} 
-                className={`product-card depth-card ${hoveredItem === companion.id ? 'hovered' : ''}`}
-                onMouseEnter={() => setHoveredItem(companion.id)}
-                onMouseLeave={() => setHoveredItem(null)}
-                style={{ 
-                  animationDelay: `${index * 0.15}s`,
-                  '--card-index': index 
-                }}
-              >
-                <div className="card-depth-shadow"></div>
+      {/* Main Image Gallery */}
+      <div className="gallery-section">
+        <div className="container">
+          <div className="gallery-layout">
+            
+            {/* Left Side - Image Display */}
+            <div className="image-display">
+              <div className="image-container">
+                <img 
+                  src={getCurrentImage().src} 
+                  alt={getCurrentImage().title} 
+                  className="main-image"
+                />
+                <div className="image-overlay" style={{ background: `linear-gradient(45deg, ${getCurrentImage().color}20, transparent)` }}></div>
+              </div>
+              
+              {/* Navigation Controls */}
+              <div className="image-controls">
+                <button className="nav-button prev" onClick={prevImage}>
+                  <i className="fas fa-chevron-left"></i>
+                </button>
                 
-                <div className="product-image">
-                  <img src={companion.image} alt={companion.name} />
-                  <div className="image-overlay"></div>
+                <div className="image-indicators">
+                  {imageGallery.map((_, index) => (
+                    <div
+                      key={index}
+                      className={`indicator ${index === currentImageIndex ? 'active' : ''}`}
+                      onClick={() => goToImage(index)}
+                      style={{ '--indicator-color': imageGallery[index].color }}
+                    ></div>
+                  ))}
                 </div>
                 
-                <div className="product-info">
-                  <h3 className="product-name">{companion.name}</h3>
-                  <p className="product-description">{companion.description}</p>
-                  
-                  <div className="product-features">
-                    {companion.features.slice(0, 2).map((feature, fIndex) => (
-                      <span key={fIndex} className="feature-tag">
+                <button className="nav-button next" onClick={nextImage}>
+                  <i className="fas fa-chevron-right"></i>
+                </button>
+              </div>
+            </div>
+
+            {/* Right Side - Description */}
+            <div className="description-panel">
+              <div className="panel-content">
+                <div className="companion-header">
+                  <h2 className="companion-title">{getCurrentImage().title}</h2>
+                  <span className="companion-subtitle" style={{ color: getCurrentImage().color }}>
+                    {getCurrentImage().subtitle}
+                  </span>
+                </div>
+                
+                <div className="mood-indicator">
+                  <span className="mood-label">Personality:</span>
+                  <span className="mood-value" style={{ background: getCurrentImage().color }}>
+                    {getCurrentImage().mood}
+                  </span>
+                </div>
+                
+                <p className="companion-description">
+                  {getCurrentImage().description}
+                </p>
+                
+                <div className="features-list">
+                  <h4>Key Features:</h4>
+                  <ul>
+                    {getCurrentImage().features.map((feature, index) => (
+                      <li key={index}>
+                        <i className="fas fa-star" style={{ color: getCurrentImage().color }}></i>
                         {feature}
-                      </span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </div>
                 
-                <div className="product-footer">
-                  <div className="price-display">
-                    <span className="price">{companion.price}</span>
-                  </div>
-                  
-                  {companion.price === "Free" ? (
-                    <button className="action-button primary">
-                      <i className="fas fa-download"></i>
-                      Download
-                    </button>
-                  ) : (
-                    <button 
-                      className="action-button secondary"
-                      onClick={() => addToCart(companion)}
-                    >
-                      <i className="fas fa-plus"></i>
-                      Add to Cart
-                    </button>
-                  )}
+                <div className="action-buttons">
+                  <button className="action-btn primary" style={{ background: getCurrentImage().color }}>
+                    <i className="fas fa-download"></i>
+                    Get This Companion
+                  </button>
+                  <button className="action-btn secondary">
+                    <i className="fas fa-info-circle"></i>
+                    Learn More
+                  </button>
                 </div>
               </div>
-            ))}
+            </div>
+            
           </div>
         </div>
       </div>

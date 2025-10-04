@@ -23,9 +23,9 @@ const Navbar = () => {
   };
 
   const navItems = [
-    { path: '/', label: 'HOME', icon: '' },
-    { path: '/shop', label: 'SHOP', icon: '' },
-    { path: '/about', label: 'ABOUT', icon: '' }
+    { path: '/', label: 'HOME', icon: 'fas fa-home', description: 'Go to homepage' },
+    { path: '/shop', label: 'SHOP', icon: 'fas fa-shopping-cart', description: 'Browse companions' },
+    { path: '/about', label: 'ABOUT', icon: 'fas fa-info-circle', description: 'Learn more about Hiro' }
   ];
 
   return (
@@ -36,8 +36,8 @@ const Navbar = () => {
       <div className="nav-container">
         <div className="nav-logo cardboard-label">
           <div className="label-pin"></div>
-          <Link to="/" className="logo-text marker-title">HIRONO</Link>
-          <span className="logo-subtitle handwritten-text">ヒロノ</span>
+          <Link to="/" className="logo-text marker-title">HIRO</Link>
+          <span className="logo-subtitle handwritten-text">ヒロ</span>
           <div className="logo-doodle"></div>
         </div>
         
@@ -48,10 +48,12 @@ const Navbar = () => {
                 to={item.path} 
                 className={`nav-link cardboard-tab ${isActive(item.path) ? 'active' : ''}`}
                 onClick={() => setIsMenuOpen(false)}
+                title={item.description}
               >
                 <div className="tab-tape"></div>
-                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-icon"><i className={item.icon}></i></span>
                 <span className="nav-text">{item.label}</span>
+                <div className="nav-indicator"></div>
                 <div className="tab-shadow"></div>
               </Link>
             </li>
@@ -61,6 +63,15 @@ const Navbar = () => {
         <div 
           className={`hamburger cardboard-button mobile-toggle ${isMenuOpen ? 'active' : ''}`} 
           onClick={toggleMenu}
+          aria-label="Toggle navigation menu"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleMenu();
+            }
+          }}
         >
           <div className="button-tape"></div>
           <div className="hamburger-lines">
@@ -68,6 +79,7 @@ const Navbar = () => {
             <span className="line"></span>
             <span className="line"></span>
           </div>
+          <div className="hamburger-text">{isMenuOpen ? 'CLOSE' : 'MENU'}</div>
           <div className="button-shadow"></div>
         </div>
       </div>
