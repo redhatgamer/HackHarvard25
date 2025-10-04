@@ -6,9 +6,28 @@ Main application entry point
 
 import sys
 import os
+
+# Suppress Google/gRPC warnings BEFORE any other imports
+os.environ['GRPC_VERBOSITY'] = 'ERROR'
+os.environ['GLOG_minloglevel'] = '2'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 import asyncio
 import logging
 from pathlib import Path
+import warnings
+
+# Suppress specific warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='google')
+warnings.filterwarnings('ignore', message='.*ALTS.*')
+
+# Suppress absl logging before it initializes (if available)
+try:
+    import absl.logging
+    absl.logging.set_verbosity(absl.logging.ERROR)
+    absl.logging.set_stderrthreshold(absl.logging.ERROR)
+except ImportError:
+    pass
 
 # Add src directory to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))

@@ -10,6 +10,8 @@ from tkinter import ttk, messagebox, simpledialog
 from typing import Optional, Dict, Any
 import threading
 import sys
+import time
+import random
 from pathlib import Path
 from PIL import Image, ImageTk
 
@@ -44,6 +46,23 @@ try:
 except ImportError:
     get_style_manager = None
     get_theme = None
+
+# Import speech managers
+try:
+    from src.ui.speech_manager import SpeechManager
+except ImportError as e:
+    SpeechManager = None
+
+try:
+    from src.ui.natural_speech_manager import NaturalSpeechManager
+except ImportError as e:
+    NaturalSpeechManager = None
+
+# Import voice input manager
+try:
+    from src.ui.voice_input_manager import VoiceInputManager
+except ImportError as e:
+    VoiceInputManager = None
 
 class PetManager:
     """Main manager for the virtual pet assistant"""
@@ -81,10 +100,86 @@ class PetManager:
         if self.style_manager:
             self.style_manager.add_theme_change_callback(self._on_theme_change)
         
+        # Speech management
+        tts_config = config.get('speech', {}).get('tts', {})
+        if tts_config.get('enabled', True):
+            
+            # Try natural voice first (much better quality)
+            if tts_config.get('use_natural_voice', True) and NaturalSpeechManager:
+                try:
+                    british_accent = tts_config.get('british_accent', True)
+                    self.speech_manager = NaturalSpeechManager(
+                        use_gtts=True,
+                        british_accent=british_accent,
+                        child_like=True  # Enable British kid voice
+                    )
+                    
+                    if self.speech_manager.is_available():
+                        voice_info = self.speech_manager.get_voice_info()
+                        self.logger.info(f"Natural TTS initialized: {voice_info}")
+                    else:
+                        raise Exception("Natural TTS not available")
+                        
+                except Exception as e:
+                    self.logger.warning(f"Natural TTS failed: {e}, falling back to basic TTS")
+                    self.speech_manager = None
+            
+            # Fallback to basic TTS if natural voice failed
+            if not self.speech_manager and SpeechManager:
+                try:
+                    self.speech_manager = SpeechManager(
+                        child_like=True,
+                        british_style=tts_config.get('british_accent', True)
+                    )
+                    
+                    if self.speech_manager.is_available():
+                        self.speech_manager.set_voice_properties(
+                            rate=tts_config.get('fallback_rate', 180),
+                            volume=tts_config.get('fallback_volume', 0.9)
+                        )
+                        self.logger.info("Basic TTS initialized (fallback)")
+                    else:
+                        self.speech_manager = None
+                        
+                except Exception as e:
+                    self.logger.warning(f"Basic TTS failed: {e}")
+                    self.speech_manager = None
+            
+            if not self.speech_manager:
+                self.logger.warning("No TTS available")
+        else:
+            self.speech_manager = None
+            self.logger.info("Text-to-speech disabled in configuration")
+        
+        # Voice input management
+        voice_config = config.get('speech', {}).get('voice_input', {})
+        if voice_config.get('enabled', True) and VoiceInputManager:
+            try:
+                self.voice_input_manager = VoiceInputManager(callback=self._on_voice_input)
+                self.logger.info("Voice input manager initialized")
+            except Exception as e:
+                self.logger.warning(f"Voice input initialization failed: {e}")
+                self.voice_input_manager = None
+        else:
+            self.voice_input_manager = None
+            self.logger.info("Voice input disabled or not available")
+        
         # State
         self.current_context = None
         self.chat_history = []
         self.conversation_messages = []  # Store conversation for speech bubbles
+        
+        # Enhanced conversation state
+        self.conversation_history = []  # Recent conversation for context
+        self.last_spontaneous_comment_time = 0
+        self.current_mood = "helpful"  # Pet's current mood
+        self.personality_traits = ["helpful", "friendly", "curious"]
+        self.activity_tracker = {
+            "last_activity": None,
+            "activity_start_time": None,
+            "inactivity_count": 0,
+            "recent_activities": []
+        }
         
         # Drag state for smooth dragging
         self.dragging = False
@@ -111,11 +206,19 @@ class PetManager:
                 )
             )
             
+            # Start spontaneous conversation system
+            conversation_task = asyncio.create_task(self._start_spontaneous_conversations())
+            
+            # Start voice input if available
+            if self.voice_input_manager:
+                self.voice_input_manager.start_listening()
+                self.logger.info("Voice input listening started")
+            
             # Start UI loop
             ui_task = asyncio.create_task(self._run_ui_loop())
             
-            # Wait for either task to complete
-            await asyncio.gather(monitor_task, ui_task, return_exceptions=True)
+            # Wait for any task to complete
+            await asyncio.gather(monitor_task, conversation_task, ui_task, return_exceptions=True)
             
         except Exception as e:
             self.logger.error(f"Error running pet manager: {e}")
@@ -436,10 +539,25 @@ class PetManager:
             is_dark = current_theme.is_dark_theme() if current_theme else False
             theme_text = "☀️ Switch to Light Mode" if is_dark else "🌙 Switch to Dark Mode"
             
+            # Get current mood emoji
+            mood_emoji = {
+                "helpful": "🤝",
+                "playful": "😸", 
+                "curious": "🤔",
+                "encouraging": "💪",
+                "sleepy": "😴",
+                "excited": "🎉"
+            }.get(self.current_mood, "🐾")
+            
             menu_options = [
                 ("💬 Open Full Chat Window", lambda: asyncio.create_task(self._open_chat_interface())),
-                ("💭 Say Something", lambda: asyncio.create_task(self._show_pet_message())),
-                ("📸 Take Screenshot & Analyze", lambda: asyncio.create_task(self._analyze_current_screen())),
+                (f"{mood_emoji} Ask Pixie Something", lambda: asyncio.create_task(self._ask_pixie_something())),
+                ("🎤 Ask Question (Voice)", lambda: asyncio.create_task(self._ask_pixie_voice())),
+                ("� Make Pixie Talk", lambda: asyncio.create_task(self._make_spontaneous_comment())),
+                ("📸 Analyze My Screen", lambda: asyncio.create_task(self._analyze_current_screen())),
+                "---",  # Separator - Interaction
+                ("🎭 Change Mood", lambda: self._change_mood_menu()),
+                (f"Current Mood: {self.current_mood.title()} {mood_emoji}", lambda: None),
                 "---",  # Separator - VS Code
                 ("🎯 Fix Current File", lambda: asyncio.create_task(self._fix_current_vscode_file())),
                 "---",  # Separator - Code Generation
@@ -626,11 +744,8 @@ class PetManager:
         thinking_id = self._add_chat_message("Pixie", "🤔 Thinking...")
         
         try:
-            # Get response from AI
-            response = await self.gemini_client.chat_response(
-                message=message,
-                context=self.current_context
-            )
+            # Get enhanced response from AI with conversation context
+            response = await self._enhanced_chat_response(message)
             
             # Replace thinking message with response
             self._replace_chat_message(thinking_id, "Pixie", response)
@@ -742,10 +857,86 @@ class PetManager:
         self.current_context = {
             "window_info": window_info,
             "app_type": self.screen_monitor.detect_application_type(window_info),
-            "timestamp": asyncio.get_event_loop().time()
+            "timestamp": asyncio.get_event_loop().time(),
+            "active_app": window_info.get("app_name", "Unknown")
         }
         
         self.logger.debug(f"Screen changed to: {window_info.get('title', 'Unknown')}")
+        
+        # React to screen changes with enhanced conversation system
+        if self.gemini_client:
+            await self._react_to_screen_change(self.current_context)
+    
+    def _on_voice_input(self, text: str):
+        """Handle voice input from the microphone"""
+        self.logger.info(f"Voice input received: '{text}'")
+        
+        # Run the async response in a thread to avoid blocking
+        def handle_voice_async():
+            try:
+                asyncio.run(self._process_voice_question(text))
+            except Exception as e:
+                self.logger.error(f"Error processing voice input: {e}")
+        
+        # Start processing in a separate thread
+        voice_thread = threading.Thread(target=handle_voice_async, daemon=True)
+        voice_thread.start()
+    
+    async def _process_voice_question(self, question: str):
+        """Process a voice question and provide AI response"""
+        try:
+            # Add visual indicator that we're processing
+            if self.speech_bubble:
+                self.speech_bubble.show_message("🎤 Thinking...", duration=1000)
+            
+            # Get AI response
+            response = await self.gemini_client.chat_response(
+                message=question,
+                context=self.current_context
+            )
+            
+            if response:
+                # Show response in speech bubble
+                if self.speech_bubble:
+                    self.speech_bubble.show_message(f"💭 {response}", duration=8000)
+                
+                # Add to chat history
+                self._add_chat_message("You", question)
+                self._add_chat_message("Pixie", response)
+                
+                # Speak the response
+                if self.speech_manager:
+                    def speak_response():
+                        try:
+                            self.speech_manager.speak_text(response)
+                        except Exception as e:
+                            self.logger.error(f"Error speaking response: {e}")
+                    
+                    # Speak in a separate thread
+                    speech_thread = threading.Thread(target=speak_response, daemon=True)
+                    speech_thread.start()
+                
+                self.logger.info(f"AI response to voice: {response[:100]}...")
+            else:
+                error_msg = "Sorry, I couldn't understand that. Could you try again?"
+                if self.speech_bubble:
+                    self.speech_bubble.show_message(f"❓ {error_msg}", duration=3000)
+                
+                if self.speech_manager:
+                    def speak_error():
+                        try:
+                            self.speech_manager.speak_text(error_msg)
+                        except Exception as e:
+                            self.logger.error(f"Error speaking error message: {e}")
+                    
+                    speech_thread = threading.Thread(target=speak_error, daemon=True)
+                    speech_thread.start()
+        
+        except Exception as e:
+            self.logger.error(f"Error processing voice question: {e}")
+            error_msg = "Sorry, I had trouble processing that question."
+            if self.speech_bubble:
+                self.speech_bubble.show_message(f"❌ {error_msg}", duration=3000)
     
     def _open_settings(self):
         """Open settings window"""
@@ -762,6 +953,15 @@ class PetManager:
         if messagebox.askquestion("Exit", "Are you sure you want to close Pixie?") == 'yes':
             self.is_running = False
             self.screen_monitor.stop_monitoring()
+            
+            # Cleanup speech manager
+            if hasattr(self, 'speech_manager') and self.speech_manager:
+                self.speech_manager.cleanup()
+            
+            # Cleanup voice input manager
+            if hasattr(self, 'voice_input_manager') and self.voice_input_manager:
+                self.voice_input_manager.stop_listening()
+            
             if self.root:
                 self.root.quit()
                 self.root.destroy()
@@ -1370,9 +1570,10 @@ class PetManager:
             self.logger.error(f"Error generating tests for VS Code file: {e}")
             await self._show_speech_bubble("Something went wrong creating tests! 😿", duration=3000)
     
-    async def _show_speech_bubble(self, message: str, duration: int = 3000):
-        """Show a speech bubble message near the pet"""
+    async def _show_speech_bubble(self, message: str, duration: int = 3000, speak: bool = True):
+        """Show a speech bubble message near the pet and optionally speak it"""
         try:
+            # Show visual speech bubble
             if hasattr(self, 'speech_bubble') and self.speech_bubble:
                 self.speech_bubble.show_message(message, duration)
             elif ModernSpeechBubble and self.root:
@@ -1384,6 +1585,14 @@ class PetManager:
             else:
                 # Fallback to simple messagebox
                 self.root.after(100, lambda: messagebox.showinfo("Pixie", message))
+            
+            # Speak the message if TTS is available and speak is True
+            if speak and hasattr(self, 'speech_manager') and self.speech_manager and self.speech_manager.is_available():
+                self.speech_manager.speak_text(message, blocking=False)
+                self.logger.info(f"Pixie says (with voice): {message}")
+            else:
+                self.logger.info(f"Pixie says: {message}")
+                
         except Exception as e:
             self.logger.error(f"Error showing speech bubble: {e}")
             # Ultimate fallback - just log the message
@@ -1466,3 +1675,365 @@ class PetManager:
                 
         except Exception as e:
             self.logger.error(f"Error applying theme to pet window: {e}")
+    
+    async def _start_spontaneous_conversations(self):
+        """Start the spontaneous conversation system"""
+        import time
+        import random
+        
+        while self.is_running:
+            try:
+                await asyncio.sleep(30)  # Check every 30 seconds
+                
+                current_time = time.time()
+                
+                # Decide if we should make a spontaneous comment
+                should_comment = False
+                
+                # Check various conditions for spontaneous speech
+                if current_time - self.last_spontaneous_comment_time > 300:  # 5 minutes since last comment
+                    # Been a while, maybe check in
+                    if self.activity_tracker["inactivity_count"] > 3:
+                        should_comment = True
+                        self.current_mood = "curious"
+                    elif random.random() < 0.3:  # 30% chance for random comment
+                        should_comment = True
+                        
+                elif self.activity_tracker.get("last_activity") == "error" and current_time - self.activity_tracker.get("activity_start_time", 0) > 60:
+                    # User has been dealing with errors for a while
+                    should_comment = True
+                    self.current_mood = "encouraging"
+                
+                if should_comment and self.gemini_client:
+                    await self._make_spontaneous_comment()
+                
+            except Exception as e:
+                self.logger.error(f"Error in spontaneous conversation: {e}")
+    
+    async def _make_spontaneous_comment(self):
+        """Generate and show a spontaneous comment"""
+        try:
+            import time
+            
+            # Get current screenshot for context
+            screenshot = self.screen_monitor.get_screenshot()
+            if not screenshot:
+                return
+            
+            # Prepare context
+            context = {
+                "time_since_last_comment": int(time.time() - self.last_spontaneous_comment_time),
+                "current_mood": self.current_mood,
+                "recent_activity": self.activity_tracker.get("last_activity", "unknown"),
+                "inactivity_count": self.activity_tracker["inactivity_count"]
+            }
+            
+            # Generate spontaneous comment
+            comment = await self.gemini_client.spontaneous_comment(
+                screenshot, 
+                context=context,
+                mood=self.current_mood
+            )
+            
+            if comment:
+                await self._show_speech_bubble(comment, duration=4000)
+                self.last_spontaneous_comment_time = time.time()
+                
+                # Add to conversation history
+                self._add_to_conversation_history("Pixie", comment)
+                
+                # Randomly change mood after speaking
+                if random.random() < 0.4:  # 40% chance to change mood
+                    self._update_mood()
+                    
+        except Exception as e:
+            self.logger.error(f"Error making spontaneous comment: {e}")
+    
+    def _add_to_conversation_history(self, speaker: str, message: str):
+        """Add message to conversation history for context"""
+        import time
+        
+        self.conversation_history.append({
+            "speaker": speaker,
+            "text": message,
+            "timestamp": time.time()
+        })
+        
+        # Keep only recent messages (last 20)
+        if len(self.conversation_history) > 20:
+            self.conversation_history = self.conversation_history[-20:]
+    
+    def _update_mood(self):
+        """Update pet's mood based on context"""
+        import random
+        
+        moods = ["helpful", "playful", "curious", "encouraging", "sleepy", "excited"]
+        
+        # Weight moods based on current activity
+        if self.activity_tracker.get("last_activity") == "error":
+            # More likely to be encouraging if user has errors
+            weights = [20, 10, 15, 40, 5, 10]
+        elif self.activity_tracker["inactivity_count"] > 2:
+            # More likely to be curious if user is inactive
+            weights = [15, 20, 40, 15, 5, 5]
+        else:
+            # Default weights
+            weights = [25, 20, 20, 15, 10, 10]
+        
+        self.current_mood = random.choices(moods, weights=weights)[0]
+        self.logger.debug(f"Pet mood changed to: {self.current_mood}")
+    
+    async def _track_user_activity(self, context: Dict[str, Any]):
+        """Track user activity for better conversation context"""
+        import time
+        
+        current_time = time.time()
+        
+        # Determine activity type from context
+        activity_type = "general"
+        if context:
+            if "error" in str(context).lower():
+                activity_type = "error"
+            elif "success" in str(context).lower() or "completed" in str(context).lower():
+                activity_type = "success"
+            elif context.get("active_app") == "Visual Studio Code":
+                activity_type = "coding"
+            elif "idle" in str(context).lower():
+                activity_type = "idle"
+        
+        # Update activity tracking
+        if self.activity_tracker["last_activity"] != activity_type:
+            self.activity_tracker["last_activity"] = activity_type
+            self.activity_tracker["activity_start_time"] = current_time
+            
+            # Add to recent activities
+            self.activity_tracker["recent_activities"].append({
+                "type": activity_type,
+                "start_time": current_time
+            })
+            
+            # Keep only recent activities (last 10)
+            if len(self.activity_tracker["recent_activities"]) > 10:
+                self.activity_tracker["recent_activities"] = self.activity_tracker["recent_activities"][-10:]
+        
+        # Track inactivity
+        if activity_type == "idle":
+            self.activity_tracker["inactivity_count"] += 1
+        else:
+            self.activity_tracker["inactivity_count"] = 0
+    
+    async def _enhanced_chat_response(self, message: str) -> str:
+        """Generate enhanced chat response with conversation context"""
+        try:
+            if not self.gemini_client:
+                return "I'm not feeling very talkative right now 😸"
+            
+            # Prepare context for better responses
+            context = {
+                "current_mood": self.current_mood,
+                "personality": ", ".join(self.personality_traits),
+                "recent_activity": self.activity_tracker.get("last_activity", "unknown")
+            }
+            
+            # Use enhanced conversational response
+            response = await self.gemini_client.conversational_response(
+                message,
+                conversation_history=self.conversation_history,
+                context=context,
+                personality_traits=self.personality_traits
+            )
+            
+            # Add both user message and response to history
+            self._add_to_conversation_history("User", message)
+            self._add_to_conversation_history("Pixie", response)
+            
+            return response
+            
+        except Exception as e:
+            self.logger.error(f"Error in enhanced chat response: {e}")
+            return "I'm having trouble thinking right now. Try talking to me again! 🐱"
+    
+    async def _react_to_screen_change(self, context: Dict[str, Any]):
+        """React to screen changes with appropriate responses"""
+        try:
+            # Track the activity
+            await self._track_user_activity(context)
+            
+            # Determine if we should react
+            activity = self.activity_tracker.get("last_activity")
+            
+            reaction_triggers = {
+                "error": 0.7,     # 70% chance to react to errors
+                "success": 0.8,   # 80% chance to celebrate success  
+                "coding": 0.2,    # 20% chance to comment on coding
+                "idle": 0.1       # 10% chance to check on idle user
+            }
+            
+            import random
+            if activity in reaction_triggers and random.random() < reaction_triggers[activity]:
+                reaction = await self.gemini_client.react_to_activity(
+                    activity, 
+                    activity_details={
+                        "duration": time.time() - self.activity_tracker.get("activity_start_time", time.time()),
+                        "context": context
+                    }
+                )
+                
+                if reaction:
+                    await self._show_speech_bubble(reaction, duration=3500)
+                    self._add_to_conversation_history("Pixie", reaction)
+            
+        except Exception as e:
+            self.logger.error(f"Error reacting to screen change: {e}")
+    
+    async def _ask_pixie_something(self):
+        """Show a dialog to ask Pixie a question"""
+        try:
+            # Simple dialog to get user input
+            question = simpledialog.askstring(
+                "Ask Pixie",
+                "What would you like to ask me? 🐾",
+                parent=self.root
+            )
+            
+            if question:
+                response = await self._enhanced_chat_response(question)
+                await self._show_speech_bubble(f"You asked: {question}\n\n{response}", duration=6000)
+                
+        except Exception as e:
+            self.logger.error(f"Error in ask Pixie: {e}")
+            await self._show_speech_bubble("I'm having trouble understanding right now! 😸", duration=3000)
+    
+    async def _ask_pixie_voice(self):
+        """Use voice input to ask Pixie a question"""
+        try:
+            if not self.voice_input_manager:
+                await self._show_speech_bubble("Voice input is not available! 🎤❌", duration=3000)
+                return
+            
+            # Show instruction bubble
+            await self._show_speech_bubble("🎤 Listening... Ask me anything! (5 seconds)", duration=5000)
+            
+            # Listen for single input
+            question = self.voice_input_manager.listen_once()
+            
+            if question:
+                self.logger.info(f"Voice question from menu: '{question}'")
+                
+                # Show processing
+                await self._show_speech_bubble("🎤 Thinking about your question...", duration=2000)
+                
+                # Get AI response using the existing chat response method
+                response = await self._enhanced_chat_response(question)
+                
+                if response:
+                    # Show response in speech bubble
+                    await self._show_speech_bubble(f"You asked: {question}\n\n💭 {response}", duration=8000)
+                    
+                    # Add to chat history
+                    self._add_chat_message("You (Voice)", question)
+                    self._add_chat_message("Pixie", response)
+                    
+                    # Speak the response
+                    if self.speech_manager and hasattr(self.speech_manager, 'speak_text'):
+                        def speak_response():
+                            try:
+                                self.speech_manager.speak_text(response)
+                            except Exception as e:
+                                self.logger.error(f"Error speaking response: {e}")
+                        
+                        # Speak in a separate thread
+                        import threading
+                        speech_thread = threading.Thread(target=speak_response, daemon=True)
+                        speech_thread.start()
+                    
+                    self.logger.info(f"Voice response completed for: {question[:50]}...")
+                else:
+                    error_msg = "Sorry, I couldn't process that question right now."
+                    await self._show_speech_bubble(f"❓ {error_msg}", duration=3000)
+            else:
+                # No speech detected
+                await self._show_speech_bubble("🎤 I didn't hear anything. Try again! 👂", duration=3000)
+                
+        except Exception as e:
+            self.logger.error(f"Error in voice question: {e}")
+            await self._show_speech_bubble("Sorry, I had trouble with voice input! 🎤❌", duration=3000)
+    
+    def _change_mood_menu(self):
+        """Show mood selection menu"""
+        try:
+            mood_window = tk.Toplevel(self.root)
+            mood_window.title("Change Pixie's Mood")
+            mood_window.geometry("300x400")
+            mood_window.wm_attributes("-topmost", True)
+            
+            # Apply theme
+            if self.style_manager:
+                theme = self.style_manager.get_theme()
+                mood_window.configure(bg=theme.get_color("background"))
+            
+            tk.Label(
+                mood_window, 
+                text="Choose Pixie's Mood 🎭",
+                font=('Segoe UI', 14, 'bold')
+            ).pack(pady=20)
+            
+            moods = [
+                ("🤝 Helpful", "helpful"),
+                ("😸 Playful", "playful"),
+                ("🤔 Curious", "curious"),
+                ("💪 Encouraging", "encouraging"),
+                ("😴 Sleepy", "sleepy"),
+                ("🎉 Excited", "excited")
+            ]
+            
+            for mood_text, mood_value in moods:
+                btn = tk.Button(
+                    mood_window,
+                    text=mood_text,
+                    font=('Segoe UI', 12),
+                    relief='flat',
+                    bd=0,
+                    padx=20,
+                    pady=10,
+                    command=lambda m=mood_value: self._set_mood_and_close(m, mood_window)
+                )
+                btn.pack(pady=5, padx=20, fill='x')
+                
+                # Apply theme to button
+                if self.style_manager:
+                    theme = self.style_manager.get_theme()
+                    if mood_value == self.current_mood:
+                        btn.configure(bg=theme.get_color("primary"), fg="white")
+                    else:
+                        btn.configure(bg=theme.get_color("surface"), fg=theme.get_color("text_primary"))
+            
+            tk.Button(
+                mood_window,
+                text="Cancel",
+                command=mood_window.destroy,
+                font=('Segoe UI', 10)
+            ).pack(pady=20)
+            
+        except Exception as e:
+            self.logger.error(f"Error showing mood menu: {e}")
+    
+    def _set_mood_and_close(self, mood: str, window: tk.Toplevel):
+        """Set pet mood and close the window"""
+        self.current_mood = mood
+        window.destroy()
+        asyncio.create_task(self._show_speech_bubble(
+            f"My mood is now {mood}! {self._get_mood_emoji()} Thanks for caring about how I feel!",
+            duration=3000
+        ))
+    
+    def _get_mood_emoji(self) -> str:
+        """Get emoji for current mood"""
+        return {
+            "helpful": "🤝",
+            "playful": "😸", 
+            "curious": "🤔",
+            "encouraging": "💪",
+            "sleepy": "😴",
+            "excited": "🎉"
+        }.get(self.current_mood, "🐾")

@@ -7,8 +7,8 @@
       "height": 270
     },
     "position": {
-      "x": 772,
-      "y": 305
+      "x": 571,
+      "y": 197
     },
     "animations": {
       "idle": "assets/pet/idle.gif",
@@ -62,6 +62,41 @@
       "hover_animations": true,
       "fade_transitions": true,
       "glassmorphism": true
+    }
+  },
+  "speech": {
+    "spontaneous_comments": true,
+    "comment_frequency": 300,
+    "reaction_probability": {
+      "error": 0.7,
+      "success": 0.8,
+      "coding": 0.2,
+      "idle": 0.1
+    },
+    "personality": {
+      "default_mood": "helpful",
+      "traits": [
+        "helpful",
+        "friendly",
+        "curious"
+      ],
+      "mood_change_probability": 0.4
+    },
+    "tts": {
+      "enabled": true,
+      "use_natural_voice": true,
+      "british_accent": true,
+      "voice_type": "natural_british",
+      "fallback_rate": 180,
+      "fallback_volume": 0.9
+    },
+    "voice_input": {
+      "enabled": true,
+      "language": "en-US",
+      "energy_threshold": 300,
+      "pause_threshold": 0.8,
+      "phrase_time_limit": 5,
+      "timeout": 1
     }
   }
 }

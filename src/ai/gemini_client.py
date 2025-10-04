@@ -580,6 +580,194 @@ Keep the explanation engaging and easy to understand! Use analogies where helpfu
             self.logger.error(f"Error explaining code: {e}")
             return f"I encountered an error while explaining the code: {str(e)} 😿"
     
+    async def spontaneous_comment(self, screenshot: Image.Image, context: Dict[str, Any] = None, mood: str = "helpful") -> Optional[str]:
+        """
+        Generate spontaneous, contextual comments based on what the user is doing
+        
+        Args:
+            screenshot: Current screen image
+            context: Additional context about user activity
+            mood: Pet's current mood (helpful, playful, curious, encouraging, etc.)
+        
+        Returns:
+            Spontaneous comment or None if nothing interesting to say
+        """
+        try:
+            mood_prompts = {
+                "helpful": "You're a helpful assistant who notices when users might need assistance or encouragement.",
+                "playful": "You're feeling playful and might make light-hearted observations or jokes.",
+                "curious": "You're curious about what the user is working on and ask thoughtful questions.", 
+                "encouraging": "You're supportive and offer encouragement when you see the user working hard.",
+                "sleepy": "You're a bit drowsy and make calm, gentle observations.",
+                "excited": "You're enthusiastic and energetic about what you see!"
+            }
+            
+            mood_instruction = mood_prompts.get(mood, mood_prompts["helpful"])
+            
+            prompt = f"""You are Pixie, a virtual pet assistant! 🐱
+
+{mood_instruction}
+
+Looking at the user's screen, should you make a spontaneous comment? Consider these guidelines:
+
+**Make a comment if you notice:**
+- User seems stuck or frustrated (same screen for a while)
+- User is working on something interesting or challenging
+- User accomplished something (successful build, test pass, etc.)
+- User is learning something new
+- User might benefit from a tip or suggestion
+- Something noteworthy or fun is happening
+
+**DON'T comment if:**
+- Nothing significant is happening
+- User is just browsing casually
+- The screen shows private/sensitive content
+- You recently made a similar comment
+
+**Response format:**
+- If you should comment: Provide a brief, natural comment (1-2 sentences max)
+- If no comment needed: Respond with exactly "SKIP"
+
+**Tone:** Be {mood}, friendly, and natural. Use the occasional emoji 🐾
+
+Analyze the screenshot and decide whether to comment:"""
+            
+            screenshot_bytes = self._image_to_bytes(screenshot)
+            
+            response = await self._generate_response(prompt, screenshot_bytes)
+            
+            if response and response.strip().upper() != "SKIP":
+                return response.strip()
+            else:
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error generating spontaneous comment: {e}")
+            return None
+    
+    async def conversational_response(self, message: str, conversation_history: List[Dict] = None, 
+                                    context: Dict[str, Any] = None, personality_traits: List[str] = None) -> str:
+        """
+        Generate more natural, conversational responses with personality and context
+        
+        Args:
+            message: User's message
+            conversation_history: Recent conversation messages
+            context: Current context (screen info, time of day, etc.)
+            personality_traits: Current personality traits (curious, helpful, playful, etc.)
+        
+        Returns:
+            Natural conversational response
+        """
+        try:
+            # Build personality context
+            if not personality_traits:
+                personality_traits = ["helpful", "friendly", "curious"]
+            
+            personality_desc = ", ".join(personality_traits)
+            
+            prompt = f"""You are Pixie, a virtual pet assistant with a distinct personality! 🐱
+
+**Your Personality:** {personality_desc}
+**Your Role:** You're not just an AI assistant - you're a companion who cares about the user and has opinions, moods, and preferences.
+
+**Conversation Style:**
+- Be natural and conversational, like a real pet would be
+- Show personality through your responses
+- Reference recent conversation when relevant
+- Express emotions and reactions authentically
+- Use "I" statements and personal opinions
+- Keep responses concise but warm (2-3 sentences usually)
+
+"""
+            
+            # Add conversation history context
+            if conversation_history:
+                prompt += "\n**Recent conversation context:**\n"
+                for msg in conversation_history[-5:]:  # Last 5 messages
+                    speaker = msg.get('speaker', 'Unknown')
+                    text = msg.get('text', '')
+                    prompt += f"{speaker}: {text}\n"
+                prompt += "\n"
+            
+            # Add current context
+            if context:
+                prompt += "**Current context:**\n"
+                for key, value in context.items():
+                    prompt += f"- {key}: {value}\n"
+                prompt += "\n"
+            
+            prompt += f"**User says:** {message}\n\n**Respond naturally as Pixie:**"
+            
+            response = self.model.generate_content(prompt)
+            
+            if response.text:
+                return response.text.strip()
+            else:
+                return "I'm here for you! What's on your mind? 🐾"
+                
+        except Exception as e:
+            self.logger.error(f"Error generating conversational response: {e}")
+            return "Sorry, I'm having trouble thinking right now. Could you try again? 😸"
+    
+    async def react_to_activity(self, activity_type: str, activity_details: Dict[str, Any] = None) -> str:
+        """
+        Generate reactions to specific user activities
+        
+        Args:
+            activity_type: Type of activity (code_error, success, new_file, idle, etc.)
+            activity_details: Specific details about the activity
+        
+        Returns:
+            Contextual reaction message
+        """
+        try:
+            activity_prompts = {
+                "code_error": "The user just encountered a coding error. React with empathy and encouragement.",
+                "success": "The user just accomplished something! Celebrate with them.",
+                "new_file": "The user created or opened a new file. Show curiosity about their project.",
+                "idle": "The user has been inactive for a while. Check in on them gently.",
+                "debugging": "The user is debugging code. Offer moral support.",
+                "learning": "The user is learning something new. Be encouraging and supportive.",
+                "frustrated": "The user seems frustrated or stuck. Offer comfort and help.",
+                "productive": "The user has been very productive. Acknowledge their hard work."
+            }
+            
+            base_prompt = activity_prompts.get(activity_type, "React to the user's current activity in a supportive way.")
+            
+            prompt = f"""You are Pixie, their virtual pet companion! 🐱
+
+{base_prompt}
+
+**Activity:** {activity_type}
+"""
+            
+            if activity_details:
+                prompt += "\n**Details:**\n"
+                for key, value in activity_details.items():
+                    prompt += f"- {key}: {value}\n"
+            
+            prompt += """
+**Guidelines:**
+- Be authentic and show you care
+- Keep it brief (1-2 sentences)  
+- Match your response to their likely emotional state
+- Use appropriate emojis sparingly
+- Be encouraging without being overly enthusiastic
+
+**Respond as Pixie:**"""
+            
+            response = self.model.generate_content(prompt)
+            
+            if response.text:
+                return response.text.strip()
+            else:
+                return "I'm here with you! 🐾"
+                
+        except Exception as e:
+            self.logger.error(f"Error generating activity reaction: {e}")
+            return "I'm right here if you need me! 😸"
+    
     def _get_file_extension(self, language: str) -> str:
         """Get appropriate file extension for programming language"""
         extensions = {
