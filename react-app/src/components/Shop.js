@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const Shop = () => {
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [hoveredItem, setHoveredItem] = useState(null);
 
   const companions = [
     {
@@ -101,59 +102,80 @@ const Shop = () => {
     setIsCartOpen(!isCartOpen);
   };
 
+  // Simplified companions data
+  const displayCompanions = companions.slice(0, 4); // Show only first 4 for simplicity
+
   return (
-    <div className="shop">
-      <div className="shop-header">
+    <div className="shop simple-depth">
+      {/* Simplified Header */}
+      <div className="shop-header depth-layer-1">
         <div className="container">
-          <h1 className="page-title">Digital Companions Shop</h1>
-          <p className="page-subtitle">Choose your perfect AI companion</p>
-          
-          <div className="cart-toggle" onClick={toggleCart}>
-            <i className="fas fa-shopping-cart"></i>
-            <span className="cart-count">{cart.length}</span>
+          <div className="header-content">
+            <h1 className="shop-title">Digital Companions</h1>
+            <p className="shop-subtitle">Choose your perfect AI companion</p>
+            
+            <div className="cart-toggle simple-button" onClick={toggleCart}>
+              <i className="fas fa-shopping-cart"></i>
+              <span className="cart-badge">{cart.length}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="shop-content">
-        <div className="container">
-          <div className="companions-grid">
-            {companions.map(companion => (
-              <div key={companion.id} className="companion-card">
-                <div className="card-image">
+      {/* Simple Product Grid */}
+      <div className="shop-content depth-layer-2">
+        <div className="container">            
+          <div className="products-grid">
+            {displayCompanions.map((companion, index) => (
+              <div 
+                key={companion.id} 
+                className={`product-card depth-card ${hoveredItem === companion.id ? 'hovered' : ''}`}
+                onMouseEnter={() => setHoveredItem(companion.id)}
+                onMouseLeave={() => setHoveredItem(null)}
+                style={{ 
+                  animationDelay: `${index * 0.15}s`,
+                  '--card-index': index 
+                }}
+              >
+                <div className="card-depth-shadow"></div>
+                
+                <div className="product-image">
                   <img src={companion.image} alt={companion.name} />
-                  <div className="category-badge">{companion.category}</div>
+                  <div className="image-overlay"></div>
                 </div>
                 
-                <div className="card-content">
-                  <h3 className="companion-name">{companion.name}</h3>
-                  <p className="companion-description">{companion.description}</p>
+                <div className="product-info">
+                  <h3 className="product-name">{companion.name}</h3>
+                  <p className="product-description">{companion.description}</p>
                   
-                  <div className="features-list">
-                    {companion.features.map((feature, index) => (
-                      <span key={index} className="feature-tag">
+                  <div className="product-features">
+                    {companion.features.slice(0, 2).map((feature, fIndex) => (
+                      <span key={fIndex} className="feature-tag">
                         {feature}
                       </span>
                     ))}
                   </div>
-                  
-                  <div className="card-footer">
-                    <div className="price">{companion.price}</div>
-                    {companion.price === "Free" ? (
-                      <button className="download-btn">
-                        <i className="fas fa-download"></i>
-                        Download
-                      </button>
-                    ) : (
-                      <button 
-                        className="add-to-cart-btn"
-                        onClick={() => addToCart(companion)}
-                      >
-                        <i className="fas fa-plus"></i>
-                        Add to Cart
-                      </button>
-                    )}
+                </div>
+                
+                <div className="product-footer">
+                  <div className="price-display">
+                    <span className="price">{companion.price}</span>
                   </div>
+                  
+                  {companion.price === "Free" ? (
+                    <button className="action-button primary">
+                      <i className="fas fa-download"></i>
+                      Download
+                    </button>
+                  ) : (
+                    <button 
+                      className="action-button secondary"
+                      onClick={() => addToCart(companion)}
+                    >
+                      <i className="fas fa-plus"></i>
+                      Add to Cart
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -161,52 +183,66 @@ const Shop = () => {
         </div>
       </div>
 
-      {/* Shopping Cart Sidebar */}
-      <div className={`cart-sidebar ${isCartOpen ? 'open' : ''}`}>
+      {/* Simplified Cart Sidebar */}
+      <div className={`cart-sidebar depth-panel ${isCartOpen ? 'open' : ''}`}>        
         <div className="cart-header">
-          <h3>Shopping Cart</h3>
+          <h3 className="cart-title">Shopping Cart</h3>
           <button className="close-cart" onClick={toggleCart}>
             <i className="fas fa-times"></i>
           </button>
         </div>
         
-        <div className="cart-items">
+        <div className="cart-body">
           {cart.length === 0 ? (
-            <p className="empty-cart">Your cart is empty</p>
+            <div className="empty-state">
+              <i className="fas fa-shopping-cart empty-icon"></i>
+              <p className="empty-text">Your cart is empty</p>
+            </div>
           ) : (
-            cart.map(item => (
-              <div key={item.id} className="cart-item">
-                <img src={item.image} alt={item.name} className="cart-item-image" />
-                <div className="cart-item-details">
-                  <h4>{item.name}</h4>
-                  <div className="quantity-controls">
-                    <button onClick={() => updateQuantity(item.id, item.quantity - 1)}>
-                      <i className="fas fa-minus"></i>
-                    </button>
-                    <span>{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.id, item.quantity + 1)}>
-                      <i className="fas fa-plus"></i>
-                    </button>
+            <div className="cart-items">
+              {cart.map(item => (
+                <div key={item.id} className="cart-item simple-item">
+                  <img src={item.image} alt={item.name} className="item-image" />
+                  <div className="item-info">
+                    <h4 className="item-name">{item.name}</h4>
+                    <div className="item-controls">
+                      <div className="quantity-controls">
+                        <button 
+                          className="qty-btn"
+                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        >
+                          -
+                        </button>
+                        <span className="quantity">{item.quantity}</span>
+                        <button 
+                          className="qty-btn"
+                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        >
+                          +
+                        </button>
+                      </div>
+                      <span className="item-price">{item.price}</span>
+                    </div>
                   </div>
-                  <div className="item-price">{item.price}</div>
+                  <button 
+                    className="remove-btn"
+                    onClick={() => removeFromCart(item.id)}
+                  >
+                    <i className="fas fa-trash"></i>
+                  </button>
                 </div>
-                <button 
-                  className="remove-item"
-                  onClick={() => removeFromCart(item.id)}
-                >
-                  <i className="fas fa-trash"></i>
-                </button>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
         
         {cart.length > 0 && (
           <div className="cart-footer">
-            <div className="cart-total">
-              Total: ${getTotalPrice()}
+            <div className="total-section">
+              <span className="total-label">Total: </span>
+              <span className="total-amount">${getTotalPrice()}</span>
             </div>
-            <button className="checkout-btn">
+            <button className="checkout-button">
               <i className="fas fa-credit-card"></i>
               Checkout
             </button>
@@ -214,7 +250,7 @@ const Shop = () => {
         )}
       </div>
 
-      {/* Overlay */}
+      {/* Cart Overlay */}
       {isCartOpen && <div className="cart-overlay" onClick={toggleCart}></div>}
     </div>
   );
