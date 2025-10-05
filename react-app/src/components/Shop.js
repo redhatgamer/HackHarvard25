@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 const Shop = () => {
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [hoveredItem, setHoveredItem] = useState(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   // Image gallery data
@@ -59,21 +58,6 @@ const Shop = () => {
 
   const getCurrentImage = () => {
     return imageGallery[currentImageIndex];
-  };
-
-  const addToCart = (companion) => {
-    if (companion.price === "Free") return;
-    
-    const existingItem = cart.find(item => item.id === companion.id);
-    if (existingItem) {
-      setCart(cart.map(item => 
-        item.id === companion.id 
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      ));
-    } else {
-      setCart([...cart, { ...companion, quantity: 1 }]);
-    }
   };
 
   const removeFromCart = (id) => {

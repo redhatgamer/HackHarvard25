@@ -15,7 +15,7 @@ const About = () => {
                 <div className="why-section">
                   <h2 className="section-title">Why HIRO?</h2>
                   <p className="why-text">
-                    We created HIRO to bring companionship to your digital life. 
+                    I created HIRO to bring companionship to your digital life. 
                     In a world where technology often feels cold and impersonal, 
                     HIRO provides warmth, personality, and genuine interaction 
                     right on your desktop.
