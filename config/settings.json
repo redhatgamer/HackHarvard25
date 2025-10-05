@@ -7,8 +7,8 @@
       "height": 270
     },
     "position": {
-      "x": 812,
-      "y": 404
+      "x": 693,
+      "y": 317
     },
     "animations": {
       "idle": "assets/pet/idle.gif",
@@ -16,6 +16,24 @@
       "speaking": "assets/pet/speaking.gif",
       "enabled": true,
       "fps": 20
+    },
+    "current_pet": "ghost",
+    "available_pets": {
+      "ghost": {
+        "name": "Ghost Pixie",
+        "image": "assets/pet/ghost.png",
+        "personality": "mysterious and helpful"
+      },
+      "clock": {
+        "name": "Time Keeper",
+        "image": "assets/pet/clock.png",
+        "personality": "punctual and organized"
+      },
+      "house": {
+        "name": "Home Guardian",
+        "image": "assets/pet/house.png",
+        "personality": "cozy and protective"
+      }
     },
     "modern_ui": {
       "enabled": true,
@@ -33,12 +51,14 @@
     "system_prompt": "You are a helpful virtual pet assistant. Be friendly, concise, and provide practical help based on what you see on the user's screen."
   },
   "screen": {
-    "capture_interval": 2.0,
+    "capture_interval": 5.0,
     "max_screenshot_size": {
-      "width": 1920,
-      "height": 1080
+      "width": 1536,
+      "height": 864
     },
-    "privacy_blur_regions": []
+    "privacy_blur_regions": [],
+    "performance_mode": true,
+    "resize_factor": 0.8
   },
   "hotkeys": {
     "activate": "ctrl+alt+p",
@@ -56,7 +76,7 @@
     "transparency": 0.95,
     "always_on_top": true,
     "click_through": false,
-    "theme": "modern",
+    "theme": "cardboard",
     "dark_mode": true,
     "effects": {
       "hover_animations": true,
@@ -66,13 +86,14 @@
   },
   "speech": {
     "spontaneous_comments": true,
-    "comment_frequency": 300,
+    "comment_frequency": 600,
     "reaction_probability": {
       "error": 0.7,
       "success": 0.8,
-      "coding": 0.2,
-      "idle": 0.1
+      "coding": 0.15,
+      "idle": 0.05
     },
+    "performance_mode": true,
     "personality": {
       "default_mood": "helpful",
       "traits": [
@@ -98,5 +119,15 @@
       "phrase_time_limit": 5,
       "timeout": 1
     }
+  },
+  "performance": {
+    "ui_frame_rate": 30,
+    "memory_management": true,
+    "max_conversation_history": 50,
+    "max_activity_history": 20,
+    "cleanup_interval": 300,
+    "gc_interval": 120,
+    "enable_profiling": false,
+    "log_slow_operations": true
   }
 }

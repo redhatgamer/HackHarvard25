@@ -25,18 +25,19 @@ except ImportError:
 try:
     from src.vscode.vscode_integration import VSCodeIntegration
 except ImportError:
-    VSCodeIntegration = None
+    VSCodeIntegration = None  # Not implemented yet
 
 # Import modern UI components
 try:
     from src.ui.modern_components import (ModernPetWidget, ModernChatWindow, 
-                                        ModernContextMenu, ModernSpeechBubble, 
-                                        DarkModeToggle)
+                                        ModernContextMenu, CardboardContextMenu,
+                                        ModernSpeechBubble, DarkModeToggle)
 except ImportError:
     # Fallback if modern components aren't available
     ModernPetWidget = None
     ModernChatWindow = None
     ModernContextMenu = None
+    CardboardContextMenu = None
     ModernSpeechBubble = None
     DarkModeToggle = None
 
@@ -78,6 +79,7 @@ class PetManager:
         self.gemini_client = gemini_client
         self.screen_monitor = screen_monitor
         self.config = config
+        self.settings = config  # Alias for consistency with pet switching methods
         
         # Initialize file manager
         try:
@@ -201,8 +203,27 @@ class PetManager:
         except Exception as e:
             self.logger.warning(f"CSV logger initialization failed: {e}")
             self.csv_logger = None
+        
+        # Initialize performance monitoring
+        try:
+            from src.utils.performance_monitor import PerformanceMonitor
+            perf_config = config.get("performance", {})
+            self.performance_monitor = PerformanceMonitor(perf_config)
+            if perf_config.get("enable_profiling", False):
+                self.performance_monitor.start_monitoring()
+            self.logger.info("Performance monitor initialized")
+        except Exception as e:
+            self.logger.warning(f"Performance monitor initialization failed: {e}")
+            self.performance_monitor = None
         self.current_mood = "helpful"  # Pet's current mood
         self.personality_traits = ["helpful", "friendly", "curious"]
+        
+        # Memory management limits
+        self.MAX_CONVERSATION_HISTORY = 50  # Limit conversation memory
+        self.MAX_ACTIVITY_HISTORY = 20      # Limit activity tracking
+        self.conversation_history = []       # Initialize conversation history
+        
+        # Memory-efficient activity tracking with limits
         self.activity_tracker = {
             "last_activity": None,
             "activity_start_time": None,
@@ -351,8 +372,8 @@ class PetManager:
             self._setup_enhanced_simple_display(size)
     
     def _setup_enhanced_simple_display(self, size):
-        """Enhanced simple display as fallback"""
-        canvas = tk.Canvas(
+        """Enhanced simple display as fallback - now loads actual pet images"""
+        self.canvas = tk.Canvas(
             self.pet_window,
             width=size["width"] - 20,
             height=size["height"] - 20,
@@ -360,26 +381,87 @@ class PetManager:
             highlightthickness=0,
             bd=0
         )
-        canvas.pack(expand=True, fill='both', padx=10, pady=10)
+        self.canvas.pack(expand=True, fill='both', padx=10, pady=10)
         
         # Enable transparency
         self.pet_window.wm_attributes('-transparentcolor', '#000001')
         
-        # Draw enhanced pet with gradient colors
+        # Load and display the current pet image
+        self._load_current_pet_image(size)
+        
+        # Store reference for compatibility
+        self.pet_canvas = self.canvas
+        
+        # Bind events for dragging and clicking
+        self.canvas.bind("<Button-1>", self._on_pet_press)
+        self.canvas.bind("<B1-Motion>", self._on_pet_drag)
+        self.canvas.bind("<ButtonRelease-1>", self._on_pet_release)
+        self.canvas.bind("<Double-Button-1>", self._on_pet_double_click)
+        self.canvas.bind("<Enter>", self._on_pet_hover_enter)
+        self.canvas.bind("<Leave>", self._on_pet_hover_leave)
+    
+    def _load_current_pet_image(self, size):
+        """Load the current pet image based on settings"""
+        try:
+            import os
+            from PIL import Image, ImageTk
+            
+            # Get current pet info
+            pet_info = self._get_current_pet_info()
+            image_path = pet_info.get('image', 'react-app/public/ghost.png')
+            
+            # Check if image exists
+            if not os.path.exists(image_path):
+                self.logger.warning(f"Pet image not found: {image_path}, creating fallback")
+                self._create_fallback_display(size)
+                return
+            
+            # Load and resize image
+            pil_image = Image.open(image_path)
+            
+            # Resize maintaining aspect ratio
+            pil_image = pil_image.resize(
+                (size["width"] - 40, size["height"] - 40), 
+                Image.Resampling.LANCZOS
+            )
+            
+            # Convert to PhotoImage
+            self.pet_image = ImageTk.PhotoImage(pil_image)
+            
+            # Add image to canvas
+            canvas_width = size["width"] - 20
+            canvas_height = size["height"] - 20
+            
+            self.canvas.create_image(
+                canvas_width // 2, 
+                canvas_height // 2, 
+                image=self.pet_image, 
+                anchor="center",
+                tags="pet"
+            )
+            
+            self.logger.info(f"Loaded pet image: {image_path}")
+            
+        except Exception as e:
+            self.logger.error(f"Error loading pet image: {e}")
+            self._create_fallback_display(size)
+    
+    def _create_fallback_display(self, size):
+        """Create fallback display when image loading fails"""
         center_x, center_y = (size["width"] - 20) // 2, (size["height"] - 20) // 2
         radius = min(size["width"], size["height"]) // 3
         
         # Glow effect
         for i in range(5):
             glow_radius = radius + i * 3
-            canvas.create_oval(
+            self.canvas.create_oval(
                 center_x - glow_radius, center_y - glow_radius,
                 center_x + glow_radius, center_y + glow_radius,
                 fill='#FF69B4', outline='', stipple='gray25'
             )
         
         # Main body with modern colors
-        canvas.create_oval(
+        self.canvas.create_oval(
             center_x - radius, center_y - radius,
             center_x + radius, center_y + radius,
             fill='#FFB6C1', outline='#FF69B4', width=3
@@ -391,32 +473,22 @@ class PetManager:
         eye_y = center_y - 8
         
         # Eye whites
-        canvas.create_oval(left_eye_x - eye_size, eye_y - 4, left_eye_x + eye_size, eye_y + 4, fill='white', outline='#ddd')
-        canvas.create_oval(right_eye_x - eye_size, eye_y - 4, right_eye_x + eye_size, eye_y + 4, fill='white', outline='#ddd')
+        self.canvas.create_oval(left_eye_x - eye_size, eye_y - 4, left_eye_x + eye_size, eye_y + 4, fill='white', outline='#ddd')
+        self.canvas.create_oval(right_eye_x - eye_size, eye_y - 4, right_eye_x + eye_size, eye_y + 4, fill='white', outline='#ddd')
         
         # Pupils
-        canvas.create_oval(left_eye_x - 3, eye_y - 3, left_eye_x + 3, eye_y + 3, fill='#333')
-        canvas.create_oval(right_eye_x - 3, eye_y - 3, right_eye_x + 3, eye_y + 3, fill='#333')
+        self.canvas.create_oval(left_eye_x - 3, eye_y - 3, left_eye_x + 3, eye_y + 3, fill='#333')
+        self.canvas.create_oval(right_eye_x - 3, eye_y - 3, right_eye_x + 3, eye_y + 3, fill='#333')
         
         # Sparkles
-        canvas.create_oval(left_eye_x - 1, eye_y - 2, left_eye_x + 1, eye_y, fill='white')
-        canvas.create_oval(right_eye_x - 1, eye_y - 2, right_eye_x + 1, eye_y, fill='white')
+        self.canvas.create_oval(left_eye_x - 1, eye_y - 2, left_eye_x + 1, eye_y, fill='white')
+        self.canvas.create_oval(right_eye_x - 1, eye_y - 2, right_eye_x + 1, eye_y, fill='white')
         
         # Nose
-        canvas.create_polygon(center_x - 3, center_y + 5, center_x + 3, center_y + 5, center_x, center_y - 2, fill='#FF1493', outline='#C71585')
+        self.canvas.create_polygon(center_x - 3, center_y + 5, center_x + 3, center_y + 5, center_x, center_y - 2, fill='#FF1493', outline='#C71585')
         
         # Mouth
-        canvas.create_arc(center_x - 12, center_y + 8, center_x + 12, center_y + 20, start=0, extent=180, outline='#FF1493', width=2, style='arc')
-        
-        self.pet_canvas = canvas
-        
-        # Bind events for dragging and clicking
-        canvas.bind("<Button-1>", self._on_pet_press)
-        canvas.bind("<B1-Motion>", self._on_pet_drag)
-        canvas.bind("<ButtonRelease-1>", self._on_pet_release)
-        canvas.bind("<Double-Button-1>", self._on_pet_double_click)
-        canvas.bind("<Enter>", self._on_pet_hover_enter)
-        canvas.bind("<Leave>", self._on_pet_hover_leave)
+        self.canvas.create_arc(center_x - 12, center_y + 8, center_x + 12, center_y + 20, start=0, extent=180, outline='#FF1493', width=2, style='arc')
     
     def _on_pet_press(self, event):
         """Handle mouse press on pet - start drag or prepare for click"""
@@ -559,10 +631,24 @@ class PetManager:
         if not self.dragging:
             self.pet_window.config(cursor="")
     
+    def _get_context_menu_class(self):
+        """Get the appropriate context menu class based on theme"""
+        ui_config = self.config.get("ui", {})
+        theme_type = ui_config.get("theme", "modern_ui")
+        
+        # Use cardboard theme if available and selected, otherwise modern
+        if theme_type == "cardboard" and CardboardContextMenu is not None:
+            return CardboardContextMenu
+        elif ModernContextMenu is not None:
+            return ModernContextMenu
+        else:
+            return None
+    
     def _on_pet_right_click(self, event):
-        """Handle right click - show modern context menu"""
-        if ModernContextMenu:
-            # Use modern context menu
+        """Handle right click - show themed context menu"""
+        ContextMenuClass = self._get_context_menu_class()
+        
+        if ContextMenuClass:
             # Determine current theme for toggle text
             current_theme = self.style_manager.get_theme() if self.style_manager else None
             is_dark = current_theme.is_dark_theme() if current_theme else False
@@ -592,8 +678,8 @@ class PetManager:
                 ("❌ Exit", self._exit_application)
             ]
             
-            modern_menu = ModernContextMenu(self.root)
-            modern_menu.show(event.x_root, event.y_root, menu_options)
+            context_menu = ContextMenuClass(self.root)
+            context_menu.show(event.x_root, event.y_root, menu_options)
         else:
             # Fallback to standard menu with better styling
             menu = tk.Menu(self.root, tearoff=0, font=('Segoe UI', 10))
@@ -621,7 +707,8 @@ class PetManager:
 
     def _show_code_tools_submenu(self, parent_event):
         """Show code tools submenu"""
-        if ModernContextMenu:
+        ContextMenuClass = self._get_context_menu_class()
+        if ContextMenuClass:
             submenu_options = [
                 ("🛠️ Generate Code", lambda: asyncio.create_task(self._show_code_generation_menu())),
                 ("📝 Analyze Code", lambda: asyncio.create_task(self._analyze_code_interface())),
@@ -629,12 +716,13 @@ class PetManager:
                 ("🧪 Generate Tests", lambda: asyncio.create_task(self._generate_tests_interface())),
                 ("💬 Full Chat Window", lambda: asyncio.create_task(self._open_chat_interface()))
             ]
-            submenu = ModernContextMenu(self.root)
+            submenu = ContextMenuClass(self.root)
             submenu.show(parent_event.x_root + 20, parent_event.y_root, submenu_options)
 
     def _show_pet_options_submenu(self, parent_event):
         """Show pet options submenu"""
-        if ModernContextMenu:
+        ContextMenuClass = self._get_context_menu_class()
+        if ContextMenuClass:
             # Get current mood emoji
             mood_emoji = {
                 "helpful": "🤝", "playful": "😸", "curious": "🤔",
@@ -652,12 +740,13 @@ class PetManager:
                 ("🔎 Make Smaller", self._resize_smaller),
                 ("📏 Reset Size", self._reset_pet_size)
             ]
-            submenu = ModernContextMenu(self.root)
+            submenu = ContextMenuClass(self.root)
             submenu.show(parent_event.x_root + 20, parent_event.y_root, submenu_options)
 
     def _show_settings_submenu(self, parent_event):
         """Show settings submenu"""
-        if ModernContextMenu:
+        ContextMenuClass = self._get_context_menu_class()
+        if ContextMenuClass:
             # Determine current theme for toggle text
             current_theme = self.style_manager.get_theme() if self.style_manager else None
             is_dark = current_theme.is_dark_theme() if current_theme else False
@@ -667,15 +756,34 @@ class PetManager:
                 (theme_text, self._toggle_dark_mode),
                 ("⚙️ Open Settings", self._open_settings),
                 "---",
+                ("🎭 Change Pet ►", lambda: self._show_pet_selection_submenu(parent_event)),
                 ("📋 View Logs", lambda: self._open_log_file()),
                 ("🔄 Restart Pet", lambda: self._restart_application())
             ]
-            submenu = ModernContextMenu(self.root)
+            submenu = ContextMenuClass(self.root)
             submenu.show(parent_event.x_root + 20, parent_event.y_root, submenu_options)
+
+    def _show_pet_selection_submenu(self, parent_event):
+        """Show pet selection submenu"""
+        ContextMenuClass = self._get_context_menu_class()
+        if ContextMenuClass:
+            current_pet = self.settings.get('pet', {}).get('current_pet', 'ghost')
+            
+            submenu_options = [
+                ("👻 Ghost Pixie" + (" ✓" if current_pet == "ghost" else ""), 
+                 lambda: asyncio.create_task(self._change_pet("ghost"))),
+                ("⏰ Time Keeper" + (" ✓" if current_pet == "clock" else ""), 
+                 lambda: asyncio.create_task(self._change_pet("clock"))),
+                ("🏠 Home Guardian" + (" ✓" if current_pet == "house" else ""), 
+                 lambda: asyncio.create_task(self._change_pet("house")))
+            ]
+            submenu = ContextMenuClass(self.root)
+            submenu.show(parent_event.x_root + 40, parent_event.y_root, submenu_options)
 
     def _show_sheets_submenu(self, parent_event):
         """Show Google Sheets submenu"""
-        if ModernContextMenu:
+        ContextMenuClass = self._get_context_menu_class()
+        if ContextMenuClass:
             # Check if sheets manager is available
             sheets_available = self.sheets_manager and self.sheets_manager.is_connected()
             csv_available = self.csv_logger is not None
@@ -692,17 +800,17 @@ class PetManager:
                 # Simple CSV options (always available)
                 ("📄 Log to CSV (Simple)", lambda: asyncio.create_task(self._log_to_csv())),
                 ("📋 Show CSV Instructions", lambda: self._show_csv_import_guide()),
-                ("� Open CSV File", lambda: self._open_csv_file()),
+                ("📁 Open CSV File", lambda: self._open_csv_file()),
                 "---",
                 # Advanced API options
                 ("📊 Connect to Sheet (API)", lambda: asyncio.create_task(self._connect_to_sheet())),
-                ("� Create Project Tracker", lambda: asyncio.create_task(self._create_project_sheet())),
+                ("📝 Create Project Tracker", lambda: asyncio.create_task(self._create_project_sheet())),
                 ("📈 Insert Screen Analysis", lambda: asyncio.create_task(self._analyze_screen_to_sheet())),
                 "---",
                 ("🔧 Setup Google Sheets", lambda: self._setup_google_sheets()),
                 ("📖 View Sheet", lambda: self._open_current_sheet())
             ]
-            submenu = ModernContextMenu(self.root)
+            submenu = ContextMenuClass(self.root)
             submenu.show(parent_event.x_root + 20, parent_event.y_root, submenu_options)
     
     def _show_activity_indicator(self, active: bool = True):
@@ -858,31 +966,29 @@ class PetManager:
             self._replace_chat_message(thinking_id, "Pixie", "Sorry, I'm having trouble thinking right now. Could you try again? 🐱")
     
     async def _analyze_current_screen(self):
-        """Analyze the current screen and provide suggestions"""
+        """Advanced technical screen analysis with detailed insights"""
         try:
             # Show activity indicator
             self._show_activity_indicator(True)
             
-            # Capture screenshot
+            # Advanced screenshot capture with metadata
             screenshot = self.screen_monitor.get_screenshot()
             context = self.screen_monitor.get_screen_context()
             
-            # Get AI analysis
-            analysis = await self.gemini_client.analyze_screen(
-                screenshot=screenshot,
-                context=context
-            )
+            if not screenshot:
+                await self._show_speech_bubble("❌ Screen capture failed. Check permissions!", duration=3000)
+                return
             
-            # Show analysis in speech bubble if available, otherwise use chat/popup
-            if self.speech_bubble:
-                # Truncate analysis for speech bubble display
-                short_analysis = analysis[:100] + "..." if len(analysis) > 100 else analysis
-                self.speech_bubble.show_message(f"📸 {short_analysis}", typing_effect=True)
-            elif self.chat_window and self.chat_window.winfo_exists():
-                self._add_chat_message("Pixie", f"📸 I can see your screen! Here's what I notice:\n\n{analysis}")
-            else:
-                # Show in a popup as last resort
-                messagebox.showinfo("Screen Analysis", analysis)
+            # Enhanced context gathering
+            enhanced_context = await self._gather_enhanced_screen_context(context)
+            
+            await self._show_speech_bubble("🔍 Analyzing screen (AI + OCR + Context)...", duration=2000)
+            
+            # Multi-modal analysis
+            analysis_results = await self._perform_advanced_screen_analysis(screenshot, enhanced_context)
+            
+            # Show detailed results in technical interface
+            await self._show_technical_analysis_results(analysis_results)
             
         except Exception as e:
             self.logger.error(f"Error analyzing screen: {e}")
@@ -899,6 +1005,198 @@ class PetManager:
         finally:
             # Hide activity indicator
             self._show_activity_indicator(False)
+    
+    async def _gather_enhanced_screen_context(self, base_context: Dict) -> Dict:
+        """Gather comprehensive screen context for analysis"""
+        enhanced_context = base_context.copy() if base_context else {}
+        
+        try:
+            # Add system information
+            import platform
+            import psutil
+            
+            enhanced_context.update({
+                'system_info': {
+                    'os': platform.system(),
+                    'version': platform.release(),
+                    'python_version': platform.python_version()
+                },
+                'resource_usage': {
+                    'memory_percent': psutil.virtual_memory().percent,
+                    'cpu_percent': psutil.cpu_percent(),
+                    'disk_usage': psutil.disk_usage('/').percent if platform.system() != 'Windows' else psutil.disk_usage('C:').percent
+                },
+                'timestamp': time.time()
+            })
+            
+            # Add VS Code context if available
+            if self.vscode_integration:
+                try:
+                    vscode_context = await self.vscode_integration.get_workspace_info()
+                    enhanced_context['vscode'] = vscode_context
+                except Exception as e:
+                    self.logger.warning(f"Could not get VS Code context: {e}")
+            
+            # Add recent activity context
+            enhanced_context['activity_history'] = self.activity_tracker.get('recent_activities', [])[-5:]
+            enhanced_context['current_mood'] = self.current_mood
+            
+        except Exception as e:
+            self.logger.error(f"Error gathering enhanced context: {e}")
+        
+        return enhanced_context
+    
+    async def _perform_advanced_screen_analysis(self, screenshot, enhanced_context: Dict) -> Dict:
+        """Perform comprehensive screen analysis with AI and technical insights"""
+        analysis_results = {
+            'ai_analysis': None,
+            'technical_insights': {},
+            'suggestions': [],
+            'detected_issues': [],
+            'screenshot_metadata': {}
+        }
+        
+        try:
+            # Screenshot metadata
+            if screenshot:
+                analysis_results['screenshot_metadata'] = {
+                    'size': f"{screenshot.width}x{screenshot.height}",
+                    'mode': screenshot.mode if hasattr(screenshot, 'mode') else 'Unknown',
+                    'timestamp': time.time()
+                }
+            
+            # AI Analysis
+            if self.gemini_client and screenshot:
+                ai_prompt = f"""
+                Analyze this screenshot with technical depth. Consider:
+                
+                Context: {enhanced_context}
+                
+                Please provide:
+                1. What application/environment is visible
+                2. Any errors, warnings, or issues visible
+                3. Workflow optimization suggestions
+                4. Code quality observations (if code is visible)
+                5. Performance recommendations
+                6. Security considerations
+                
+                Be specific and technical in your analysis.
+                """
+                
+                analysis_results['ai_analysis'] = await self.gemini_client.analyze_screen(
+                    screenshot=screenshot,
+                    context=enhanced_context,
+                    prompt=ai_prompt
+                )
+            
+            # Technical insights based on context
+            active_app = enhanced_context.get('active_app', '').lower()
+            
+            if 'code' in active_app or 'visual studio' in active_app:
+                analysis_results['technical_insights']['environment'] = 'Development'
+                analysis_results['suggestions'].append("💡 Consider using code analysis tools")
+                analysis_results['suggestions'].append("🔍 Check for syntax highlighting errors")
+            
+            elif 'browser' in active_app or 'chrome' in active_app or 'firefox' in active_app:
+                analysis_results['technical_insights']['environment'] = 'Web Browsing'
+                analysis_results['suggestions'].append("🌐 Check browser developer tools (F12)")
+                analysis_results['suggestions'].append("🔒 Verify SSL/HTTPS security")
+            
+            elif 'terminal' in active_app or 'cmd' in active_app or 'powershell' in active_app:
+                analysis_results['technical_insights']['environment'] = 'Command Line'
+                analysis_results['suggestions'].append("⚡ Consider using command history (↑)")
+                analysis_results['suggestions'].append("📝 Document complex commands")
+            
+            # Resource usage insights
+            resource_usage = enhanced_context.get('resource_usage', {})
+            memory_percent = resource_usage.get('memory_percent', 0)
+            cpu_percent = resource_usage.get('cpu_percent', 0)
+            
+            if memory_percent > 80:
+                analysis_results['detected_issues'].append(f"⚠️ High memory usage: {memory_percent:.1f}%")
+                analysis_results['suggestions'].append("💾 Close unused applications")
+            
+            if cpu_percent > 80:
+                analysis_results['detected_issues'].append(f"⚠️ High CPU usage: {cpu_percent:.1f}%")
+                analysis_results['suggestions'].append("⚡ Check task manager for resource-heavy processes")
+            
+        except Exception as e:
+            self.logger.error(f"Error in advanced screen analysis: {e}")
+            analysis_results['error'] = str(e)
+        
+        return analysis_results
+    
+    async def _show_technical_analysis_results(self, analysis_results: Dict):
+        """Display comprehensive analysis results in technical format"""
+        try:
+            # Build technical report
+            report_lines = [
+                "🔍 ADVANCED SCREEN ANALYSIS",
+                "=" * 35,
+                ""
+            ]
+            
+            # Screenshot metadata
+            metadata = analysis_results.get('screenshot_metadata', {})
+            if metadata:
+                report_lines.extend([
+                    "📸 Screenshot Info:",
+                    f"  • Resolution: {metadata.get('size', 'Unknown')}",
+                    f"  • Format: {metadata.get('mode', 'Unknown')}",
+                    ""
+                ])
+            
+            # Technical insights
+            insights = analysis_results.get('technical_insights', {})
+            if insights:
+                report_lines.append("🔧 Technical Insights:")
+                for key, value in insights.items():
+                    report_lines.append(f"  • {key.title()}: {value}")
+                report_lines.append("")
+            
+            # Detected issues
+            issues = analysis_results.get('detected_issues', [])
+            if issues:
+                report_lines.append("⚠️ Detected Issues:")
+                for issue in issues:
+                    report_lines.append(f"  • {issue}")
+                report_lines.append("")
+            
+            # Suggestions
+            suggestions = analysis_results.get('suggestions', [])
+            if suggestions:
+                report_lines.append("💡 Optimization Suggestions:")
+                for suggestion in suggestions[:5]:  # Limit to top 5
+                    report_lines.append(f"  • {suggestion}")
+                report_lines.append("")
+            
+            # AI Analysis summary
+            ai_analysis = analysis_results.get('ai_analysis', '')
+            if ai_analysis:
+                # Truncate for speech bubble
+                ai_summary = ai_analysis[:200] + "..." if len(ai_analysis) > 200 else ai_analysis
+                report_lines.extend([
+                    "🤖 AI Analysis:",
+                    ai_summary,
+                    ""
+                ])
+            
+            # Create final report
+            final_report = "\n".join(report_lines)
+            
+            # Show in speech bubble (truncated) and log full report
+            speech_summary = final_report[:400] + "\n\n📊 Full report logged to console."
+            await self._show_speech_bubble(speech_summary, duration=8000)
+            
+            # Log complete analysis
+            self.logger.info(f"Complete Screen Analysis:\n{final_report}")
+            
+            if ai_analysis:
+                self.logger.info(f"Full AI Analysis:\n{ai_analysis}")
+            
+        except Exception as e:
+            self.logger.error(f"Error showing analysis results: {e}")
+            await self._show_speech_bubble("❌ Analysis complete but display failed. Check logs.", duration=3000)
     
     def _add_modern_chat_message(self, sender: str, message: str) -> str:
         """Add a message with modern styling"""
@@ -1117,11 +1415,17 @@ class PetManager:
             self.pet_widget._resize_pet(reset_to_default=True)
     
     async def _run_ui_loop(self):
-        """Run the UI event loop"""
+        """Run the UI event loop with optimized frequency"""
+        frame_time = 1/30  # 30 FPS instead of 100 FPS for better performance
         while self.is_running and self.root and self.root.winfo_exists():
             try:
+                frame_start = time.time()
                 self.root.update()
-                await asyncio.sleep(0.01)  # Small delay to prevent excessive CPU usage
+                
+                # Adaptive sleep to maintain consistent frame rate
+                elapsed = time.time() - frame_start
+                sleep_time = max(0.001, frame_time - elapsed)  # Min 1ms sleep
+                await asyncio.sleep(sleep_time)
             except tk.TclError:
                 # Window was destroyed
                 break
@@ -1376,13 +1680,18 @@ class PetManager:
         """Show generated code in a result window"""
         try:
             window = tk.Toplevel(self.root)
-            window.title(f"Pixie - {title}")
-            window.geometry("800x600")
+            window.title(f"📦 Pixie's Workshop - {title}")
+            window.geometry("850x650")
+            window.configure(bg='#D2B48C')
             window.wm_attributes("-topmost", True)
             
-            # Create notebook for tabs
-            notebook = ttk.Notebook(window)
-            notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            # Create cardboard-styled main frame
+            main_frame = tk.Frame(window, bg='#D2B48C', relief='raised', bd=3)
+            main_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+            
+            # Create notebook for tabs with cardboard styling
+            notebook = ttk.Notebook(main_frame)
+            notebook.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
             
             # Code tab
             code_frame = ttk.Frame(notebook)
@@ -1634,31 +1943,251 @@ class PetManager:
     # ===== VS Code Integration Methods =====
     
     async def _fix_current_vscode_file(self):
-        """Fix the currently active file in VS Code"""
+        """Advanced VS Code file analysis and fixing with technical insights"""
         try:
             if not self.vscode_integration:
-                await self._show_speech_bubble("VS Code integration not available! 😿", duration=3000)
+                await self._show_speech_bubble("❌ VS Code integration unavailable. Install VS Code extension!", duration=3000)
                 return
             
-            await self._show_speech_bubble("Fixing your current file... 🔧", duration=2000)
+            # Multi-step technical process
+            await self._show_speech_bubble("🔍 Scanning active file for issues...", duration=1500)
             
-            result = await self.vscode_integration.apply_code_fix(self.gemini_client)
+            # Get detailed file analysis
+            file_info = await self._get_detailed_file_info()
+            if not file_info:
+                await self._show_speech_bubble("❌ No active file detected in VS Code", duration=3000)
+                return
             
-            if result.get('success'):
-                if result.get('applied'):
-                    message = f"✅ Fixed your file!\n\n{result.get('explanation', 'Code has been improved')}"
-                    if result.get('backup_path'):
-                        message += f"\n\nBackup saved: {Path(result['backup_path']).name}"
-                    
-                    await self._show_speech_bubble(message, duration=5000)
-                else:
-                    await self._show_speech_bubble(f"Found issues but couldn't apply fix: {result.get('edit_error', 'Unknown error')} 😿", duration=4000)
+            await self._show_speech_bubble(f"📄 Analyzing {file_info['language']} file ({file_info['lines']} lines)...", duration=2000)
+            
+            # Advanced code analysis
+            analysis_result = await self._perform_advanced_code_analysis(file_info)
+            
+            # Show technical fix interface
+            fix_applied = await self._show_technical_fix_interface(analysis_result)
+            
+            if fix_applied:
+                await self._show_speech_bubble("✅ Code fixes applied successfully!", duration=3000)
             else:
-                await self._show_speech_bubble(f"Couldn't fix the file: {result.get('error', 'Unknown error')} 😿", duration=4000)
+                await self._show_speech_bubble("ℹ️ Analysis complete. Check results panel.", duration=3000)
                 
         except Exception as e:
-            self.logger.error(f"Error fixing VS Code file: {e}")
-            await self._show_speech_bubble("Something went wrong fixing your file! 😿", duration=3000)
+            self.logger.error(f"Error in advanced file fix: {e}")
+            await self._show_speech_bubble("❌ File analysis failed. Check VS Code connection.", duration=3000)
+    
+    async def _get_detailed_file_info(self) -> Dict:
+        """Get detailed information about the current VS Code file"""
+        try:
+            if not self.vscode_integration:
+                return None
+            
+            # Get basic file info from VS Code integration
+            file_info = {
+                'path': None,
+                'language': 'unknown',
+                'lines': 0,
+                'size': 0,
+                'encoding': 'utf-8',
+                'errors': [],
+                'warnings': []
+            }
+            
+            # Try to get active file details
+            try:
+                active_file = await self.vscode_integration.get_active_file_info()
+                if active_file:
+                    file_info.update(active_file)
+            except Exception as e:
+                self.logger.warning(f"Could not get VS Code file info: {e}")
+            
+            return file_info if file_info['path'] else None
+            
+        except Exception as e:
+            self.logger.error(f"Error getting file info: {e}")
+            return None
+    
+    async def _perform_advanced_code_analysis(self, file_info: Dict) -> Dict:
+        """Perform comprehensive code analysis"""
+        analysis = {
+            'syntax_errors': [],
+            'style_issues': [],
+            'security_vulnerabilities': [],
+            'performance_issues': [],
+            'best_practices': [],
+            'complexity_metrics': {},
+            'suggested_fixes': []
+        }
+        
+        try:
+            if not self.gemini_client:
+                analysis['error'] = "AI analysis unavailable - no Gemini client"
+                return analysis
+            
+            # Get file content for analysis
+            file_content = await self._get_file_content(file_info['path'])
+            if not file_content:
+                analysis['error'] = "Could not read file content"
+                return analysis
+            
+            # Language-specific analysis
+            language = file_info.get('language', '').lower()
+            
+            # AI-powered code analysis
+            ai_analysis = await self.gemini_client.analyze_code(
+                code=file_content,
+                language=language,
+                analysis_type='comprehensive',
+                context={
+                    'file_path': file_info['path'],
+                    'file_size': file_info['size'],
+                    'line_count': file_info['lines']
+                }
+            )
+            
+            # Parse AI analysis into structured format
+            analysis = self._parse_ai_code_analysis(ai_analysis, analysis)
+            
+            # Add language-specific checks
+            if language in ['python', 'javascript', 'typescript', 'java', 'cpp']:
+                analysis = await self._add_language_specific_analysis(file_content, language, analysis)
+            
+        except Exception as e:
+            self.logger.error(f"Error in code analysis: {e}")
+            analysis['error'] = str(e)
+        
+        return analysis
+    
+    def _parse_ai_code_analysis(self, ai_response: str, base_analysis: Dict) -> Dict:
+        """Parse AI analysis response into structured format"""
+        try:
+            # Simple parsing - in production, you'd use more sophisticated NLP
+            lines = ai_response.lower().split('\n')
+            
+            for line in lines:
+                if 'syntax error' in line or 'error:' in line:
+                    base_analysis['syntax_errors'].append(line.strip())
+                elif 'warning' in line or 'style' in line:
+                    base_analysis['style_issues'].append(line.strip())
+                elif 'security' in line or 'vulnerability' in line:
+                    base_analysis['security_vulnerabilities'].append(line.strip())
+                elif 'performance' in line or 'optimization' in line:
+                    base_analysis['performance_issues'].append(line.strip())
+                elif 'best practice' in line or 'recommend' in line:
+                    base_analysis['best_practices'].append(line.strip())
+                elif 'fix:' in line or 'solution:' in line:
+                    base_analysis['suggested_fixes'].append(line.strip())
+            
+            return base_analysis
+            
+        except Exception as e:
+            self.logger.warning(f"Error parsing AI analysis: {e}")
+            return base_analysis
+    
+    async def _add_language_specific_analysis(self, code: str, language: str, analysis: Dict) -> Dict:
+        """Add language-specific static analysis"""
+        try:
+            # Python-specific checks
+            if language == 'python':
+                # Check for common Python issues
+                if 'import *' in code:
+                    analysis['style_issues'].append("Avoid wildcard imports (import *)")
+                if 'except:' in code and 'except Exception:' not in code:
+                    analysis['best_practices'].append("Use specific exception handling")
+                
+                # Check for security issues
+                if 'eval(' in code or 'exec(' in code:
+                    analysis['security_vulnerabilities'].append("Avoid eval() and exec() - security risk")
+            
+            # JavaScript/TypeScript checks
+            elif language in ['javascript', 'typescript']:
+                if '==' in code and '===' not in code:
+                    analysis['style_issues'].append("Use strict equality (===) instead of ==")
+                if 'var ' in code:
+                    analysis['best_practices'].append("Use 'let' or 'const' instead of 'var'")
+            
+            # Add complexity metrics
+            analysis['complexity_metrics'] = {
+                'lines_of_code': len(code.split('\n')),
+                'function_count': code.count('def ') + code.count('function '),
+                'class_count': code.count('class '),
+                'comment_ratio': (code.count('#') + code.count('//') + code.count('/*')) / max(len(code.split('\n')), 1)
+            }
+            
+        except Exception as e:
+            self.logger.warning(f"Error in language-specific analysis: {e}")
+        
+        return analysis
+    
+    async def _get_file_content(self, file_path: str) -> str:
+        """Get file content for analysis"""
+        try:
+            if self.vscode_integration and hasattr(self.vscode_integration, 'get_file_content'):
+                return await self.vscode_integration.get_file_content(file_path)
+            else:
+                # Fallback: read file directly
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+        except Exception as e:
+            self.logger.error(f"Error reading file content: {e}")
+            return ""
+    
+    async def _show_technical_fix_interface(self, analysis_result: Dict) -> bool:
+        """Show technical interface for code fixes"""
+        try:
+            # Create a comprehensive report
+            report_lines = [
+                "🔧 CODE ANALYSIS REPORT",
+                "=" * 30,
+                ""
+            ]
+            
+            # Add metrics
+            metrics = analysis_result.get('complexity_metrics', {})
+            if metrics:
+                report_lines.extend([
+                    "📊 Code Metrics:",
+                    f"  • Lines: {metrics.get('lines_of_code', 'N/A')}",
+                    f"  • Functions: {metrics.get('function_count', 'N/A')}",
+                    f"  • Classes: {metrics.get('class_count', 'N/A')}",
+                    f"  • Comment Ratio: {metrics.get('comment_ratio', 0):.2f}",
+                    ""
+                ])
+            
+            # Add issues
+            syntax_errors = analysis_result.get('syntax_errors', [])
+            if syntax_errors:
+                report_lines.append("❌ Syntax Errors:")
+                for error in syntax_errors[:3]:
+                    report_lines.append(f"  • {error}")
+                report_lines.append("")
+            
+            security_issues = analysis_result.get('security_vulnerabilities', [])
+            if security_issues:
+                report_lines.append("�️ Security Issues:")
+                for issue in security_issues[:3]:
+                    report_lines.append(f"  • {issue}")
+                report_lines.append("")
+            
+            # Add suggestions
+            fixes = analysis_result.get('suggested_fixes', [])
+            if fixes:
+                report_lines.append("🔧 Suggested Fixes:")
+                for fix in fixes[:3]:
+                    report_lines.append(f"  • {fix}")
+            
+            # Show comprehensive report
+            full_report = "\n".join(report_lines)
+            await self._show_speech_bubble(full_report[:500] + "...", duration=10000)
+            
+            # Log detailed report
+            self.logger.info(f"Code Analysis Report:\n{full_report}")
+            
+            # Return True if fixes were suggested
+            return len(fixes) > 0 or len(syntax_errors) > 0
+            
+        except Exception as e:
+            self.logger.error(f"Error showing technical fix interface: {e}")
+            return False
     
     async def _analyze_current_vscode_file(self):
         """Analyze the currently active file in VS Code"""
@@ -1811,14 +2340,22 @@ class PetManager:
             self.logger.error(f"Error applying theme to pet window: {e}")
     
     async def _start_spontaneous_conversations(self):
-        """Start the spontaneous conversation system"""
+        """Start the spontaneous conversation system with adaptive timing"""
         import time
         import random
         
+        # Adaptive sleep intervals based on activity
+        base_interval = 60  # Base check interval: 60 seconds
+        
         while self.is_running:
             try:
-                await asyncio.sleep(30)  # Check every 30 seconds
+                # Adaptive sleep based on user activity
+                if self.activity_tracker.get("inactivity_count", 0) > 5:
+                    sleep_time = base_interval * 2  # Less frequent when idle
+                else:
+                    sleep_time = base_interval
                 
+                await asyncio.sleep(sleep_time)
                 current_time = time.time()
                 
                 # Decide if we should make a spontaneous comment
@@ -1884,18 +2421,23 @@ class PetManager:
             self.logger.error(f"Error making spontaneous comment: {e}")
     
     def _add_to_conversation_history(self, speaker: str, message: str):
-        """Add message to conversation history for context"""
-        import time
+        """Add message to conversation history with optimized memory management"""
+        # Ensure conversation_history exists
+        if not hasattr(self, 'conversation_history'):
+            self.conversation_history = []
+        
+        # Truncate long messages to save memory
+        truncated_message = message[:500] if len(message) > 500 else message
         
         self.conversation_history.append({
             "speaker": speaker,
-            "text": message,
+            "text": truncated_message,
             "timestamp": time.time()
         })
         
-        # Keep only recent messages (last 20)
-        if len(self.conversation_history) > 20:
-            self.conversation_history = self.conversation_history[-20:]
+        # Maintain memory limit - use configured limit
+        if len(self.conversation_history) > self.MAX_CONVERSATION_HISTORY:
+            self.conversation_history = self.conversation_history[-self.MAX_CONVERSATION_HISTORY:]
     
     def _update_mood(self):
         """Update pet's mood based on context"""
@@ -1940,15 +2482,17 @@ class PetManager:
             self.activity_tracker["last_activity"] = activity_type
             self.activity_tracker["activity_start_time"] = current_time
             
-            # Add to recent activities
+            # Add to recent activities with memory management
+            context_summary = str(context)[:200] if context else None  # Limit context size
             self.activity_tracker["recent_activities"].append({
                 "type": activity_type,
+                "context": context_summary,
                 "start_time": current_time
             })
             
-            # Keep only recent activities (last 10)
-            if len(self.activity_tracker["recent_activities"]) > 10:
-                self.activity_tracker["recent_activities"] = self.activity_tracker["recent_activities"][-10:]
+            # Maintain memory limits - use configured limit
+            if len(self.activity_tracker["recent_activities"]) > self.MAX_ACTIVITY_HISTORY:
+                self.activity_tracker["recent_activities"] = self.activity_tracker["recent_activities"][-self.MAX_ACTIVITY_HISTORY:]
         
         # Track inactivity
         if activity_type == "idle":
@@ -2021,22 +2565,468 @@ class PetManager:
             self.logger.error(f"Error reacting to screen change: {e}")
     
     async def _ask_pixie_something(self):
-        """Show a dialog to ask Pixie a question"""
+        """Advanced technical chat interface with context awareness"""
         try:
-            # Simple dialog to get user input
+            # Show technical chat interface instead of simple dialog
+            await self._show_advanced_chat_interface()
+            
+        except Exception as e:
+            self.logger.error(f"Error in advanced chat: {e}")
+            await self._show_speech_bubble("❌ Chat interface error. Check logs.", duration=3000)
+    
+    async def _show_advanced_chat_interface(self):
+        """Show advanced technical chat interface with context awareness"""
+        try:
+            # Create advanced chat window with cardboard theme
+            chat_window = tk.Toplevel(self.root)
+            chat_window.title("📦 Pixie Cardboard Workshop")
+            chat_window.geometry("650x550")
+            chat_window.resizable(True, True)
+            
+            # Cardboard window styling
+            chat_window.configure(bg='#D2B48C')
+            chat_window.attributes('-topmost', True)
+            chat_window.after(100, lambda: chat_window.attributes('-topmost', False))
+            
+            # Create main cardboard frame with texture
+            main_frame = tk.Frame(chat_window, bg='#D2B48C', relief='raised', bd=3)
+            main_frame.pack(fill='both', expand=True, padx=8, pady=8)
+            
+            # Add cardboard texture border
+            texture_frame = tk.Frame(main_frame, bg='#C19A6B', relief='sunken', bd=2)
+            texture_frame.pack(fill='both', expand=True, padx=3, pady=3)
+            
+            # Cardboard context panel (top)
+            context_frame = tk.LabelFrame(texture_frame, text="� System Status", 
+                                        bg='#DEB887', fg='#8B4513', font=('Courier New', 10, 'bold'),
+                                        relief='raised', bd=2)
+            context_frame.pack(fill='x', pady=(5, 10), padx=5)
+            
+            # Get current context
+            current_context = await self._get_current_technical_context()
+            
+            # Cardboard-style context display
+            context_text = tk.Text(context_frame, height=4, bg='#F5DEB3', fg='#5D4037', 
+                                 font=('Courier New', 9), wrap='word', relief='sunken', bd=2)
+            context_text.pack(fill='x', padx=6, pady=6)
+            
+            # Insert context information
+            context_info = [
+                f"System: {current_context.get('system', 'Unknown')}",
+                f"Active App: {current_context.get('active_app', 'Unknown')}",
+                f"Current Task: {current_context.get('current_task', 'General')}",
+                f"Files Open: {current_context.get('open_files', 0)}"
+            ]
+            context_text.insert('1.0', '\n'.join(context_info))
+            context_text.config(state='disabled')
+            
+            # Cardboard chat display (middle)
+            chat_frame = tk.LabelFrame(texture_frame, text="� Workshop Conversation", 
+                                     bg='#DEB887', fg='#8B4513', font=('Courier New', 10, 'bold'),
+                                     relief='raised', bd=2)
+            chat_frame.pack(fill='both', expand=True, pady=(0, 10), padx=5)
+            
+            # Cardboard chat display with rustic styling
+            chat_display = tk.Text(chat_frame, bg='#FFF8DC', fg='#654321', 
+                                 font=('Courier New', 10), wrap='word', state='disabled',
+                                 relief='sunken', bd=2)
+            
+            # Cardboard scrollbar
+            scrollbar = tk.Scrollbar(chat_frame, command=chat_display.yview,
+                                   bg='#D2B48C', troughcolor='#C19A6B', 
+                                   activebackground='#DEB887')
+            chat_display.configure(yscrollcommand=scrollbar.set)
+            
+            chat_display.pack(side='left', fill='both', expand=True, padx=(6, 0), pady=6)
+            scrollbar.pack(side='right', fill='y', pady=6)
+            
+            # Configure cardboard text tags
+            chat_display.tag_configure('user', foreground='#8B4513', font=('Courier New', 10, 'bold'))
+            chat_display.tag_configure('assistant', foreground='#A0522D', font=('Courier New', 10, 'bold'))
+            chat_display.tag_configure('code', background='#F4A460', foreground='#654321', font=('Courier New', 9), relief='raised')
+            chat_display.tag_configure('error', foreground='#B22222', font=('Courier New', 10, 'bold'))
+            chat_display.tag_configure('success', foreground='#228B22', font=('Courier New', 10, 'bold'))
+            
+            # Cardboard input panel (bottom)
+            input_frame = tk.LabelFrame(texture_frame, text="✍️ WRITE YOUR MESSAGE ON CARDBOARD ↓", 
+                                      bg='#DEB887', fg='#8B4513', font=('Courier New', 11, 'bold'),
+                                      relief='raised', bd=3)
+            input_frame.pack(fill='x', pady=(5, 5), padx=5)
+            
+            # Cardboard instruction label
+            instruction_label = tk.Label(input_frame, 
+                                       text="� Write your workshop question below and press 'Send Message' or Ctrl+Enter",
+                                       bg='#DEB887', fg='#A0522D', font=('Courier New', 9, 'bold'))
+            instruction_label.pack(pady=(6, 4))
+            
+            # Cardboard input area
+            input_text = tk.Text(input_frame, height=4, bg='#FFEFD5', fg='#654321', 
+                               font=('Courier New', 11), wrap='word', relief='sunken', bd=3,
+                               insertbackground='#8B4513', selectbackground='#DEB887')
+            input_text.pack(fill='x', padx=10, pady=(0, 8))
+            
+            # Cardboard placeholder text
+            placeholder_text = "Example: How do I craft better Python code in my workshop?"
+            input_text.insert('1.0', placeholder_text)
+            input_text.configure(fg='#A0522D')  # Brown placeholder text
+            
+            # Placeholder text handling
+            def on_focus_in(event):
+                if input_text.get('1.0', 'end-1c') == placeholder_text:
+                    input_text.delete('1.0', 'end')
+                    input_text.configure(fg='#654321')  # Dark brown text when typing
+            
+            def on_focus_out(event):
+                if input_text.get('1.0', 'end-1c').strip() == '':
+                    input_text.insert('1.0', placeholder_text)
+                    input_text.configure(fg='#A0522D')  # Sienna placeholder
+            
+            input_text.bind('<FocusIn>', on_focus_in)
+            input_text.bind('<FocusOut>', on_focus_out)
+            
+            # Button frame
+            button_frame = tk.Frame(input_frame, bg='#DEB887')
+            button_frame.pack(fill='x', padx=8, pady=6)
+            
+            # Cardboard quick action buttons
+            quick_actions = [
+                ("🔍 Workshop Status", lambda: self._quick_analyze_context(chat_display)),
+                ("� Fix My Tools", lambda: self._quick_debug_help(chat_display)),
+                ("� Code Recipes", lambda: self._quick_code_examples(chat_display)),
+                ("⚙️ Speed Tips", lambda: self._quick_performance_tips(chat_display))
+            ]
+            
+            for i, (text, command) in enumerate(quick_actions):
+                btn = tk.Button(button_frame, text=text, command=command,
+                              bg='#F4A460', fg='#654321', font=('Courier New', 8, 'bold'),
+                              relief='raised', bd=2, padx=8, pady=3, cursor='hand2',
+                              activebackground='#DEB887', activeforeground='#8B4513')
+                btn.pack(side='left', padx=3)
+                
+                # Add cardboard hover effects
+                def on_btn_hover(e, button=btn):
+                    button.configure(relief='raised', bd=3, bg='#DEB887')
+                def on_btn_leave(e, button=btn):
+                    button.configure(relief='raised', bd=2, bg='#F4A460')
+                
+                btn.bind('<Enter>', on_btn_hover)
+                btn.bind('<Leave>', on_btn_leave)
+            
+            # Enhanced send functionality
+            async def send_technical_message():
+                query = input_text.get('1.0', 'end-1c').strip()
+                # Check if it's placeholder text
+                if query and query != placeholder_text:
+                    # Cardboard visual feedback
+                    send_btn.configure(text="� Crafting...", state='disabled', bg='#BC9A6A')
+                    chat_window.update()
+                    
+                    await self._process_technical_query(query, chat_display, current_context)
+                    input_text.delete('1.0', 'end')
+                    
+                    # Re-enable cardboard button
+                    send_btn.configure(text="� Send Message", state='normal', bg='#CD853F')
+                    
+                    # Add cardboard placeholder back
+                    input_text.insert('1.0', placeholder_text)
+                    input_text.configure(fg='#A0522D')
+                else:
+                    # Flash cardboard input area if empty
+                    original_bg = input_text.cget('bg')
+                    input_text.configure(bg='#F0E68C')  # Khaki flash
+                    chat_window.after(200, lambda: input_text.configure(bg=original_bg))
+            
+            # Cardboard send button
+            send_btn = tk.Button(button_frame, text="� Send Message",
+                               command=lambda: asyncio.create_task(send_technical_message()),
+                               bg='#CD853F', fg='#654321', font=('Courier New', 12, 'bold'),
+                               relief='raised', bd=4, padx=18, pady=6, cursor='hand2',
+                               activebackground='#DEB887', activeforeground='#8B4513')
+            send_btn.pack(side='right', padx=(12, 8))
+            
+            # Cardboard send button hover effects
+            def on_send_hover(event):
+                send_btn.configure(bg='#DEB887', relief='raised', bd=5)
+            
+            def on_send_leave(event):
+                send_btn.configure(bg='#CD853F', relief='raised', bd=4)
+            
+            send_btn.bind('<Enter>', on_send_hover)
+            send_btn.bind('<Leave>', on_send_leave)
+            
+            # Enhanced key bindings
+            def on_enter(event):
+                if event.state & 0x4:  # Ctrl+Enter
+                    asyncio.create_task(send_technical_message())
+                    return 'break'
+            
+            def on_regular_enter(event):
+                # Allow regular Enter for new lines, but show hint
+                current_text = input_text.get('1.0', 'end-1c')
+                if current_text.count('\n') == 0:  # First line
+                    # Show hint in status
+                    instruction_label.configure(text="💡 Press Ctrl+Enter to send, or use the Send Message button")
+                    chat_window.after(3000, lambda: instruction_label.configure(
+                        text="� Write your workshop question below and press 'Send Message' or Ctrl+Enter"))
+            
+            input_text.bind('<Control-Return>', on_enter)
+            input_text.bind('<Return>', on_regular_enter)
+            
+            # Initial welcome message with usage instructions
+            welcome_message = """📦 Welcome to Pixie's Cardboard Workshop!
+
+I can craft solutions for:
+• Code analysis & debugging
+• Performance optimization  
+• Architecture blueprints
+• Best practices & security
+
+� HOW TO USE THE WORKSHOP:
+1. Click in the cardboard text box at the bottom
+2. Write your technical question
+3. Press 'Send Message' button or Ctrl+Enter
+4. Use quick tools for common tasks
+
+Example workshop requests:
+• "How do I craft better Python functions?"
+• "What's causing my workshop to slow down?"
+• "Show me async/await blueprints"
+
+Let's build something great! """
+            
+            self._add_technical_message(chat_display, 'assistant', welcome_message)
+            
+            # Focus on input and clear placeholder when ready
+            def focus_input():
+                input_text.focus_set()
+                # Clear placeholder and position cursor
+                if input_text.get('1.0', 'end-1c') == placeholder_text:
+                    input_text.delete('1.0', 'end')
+                    input_text.configure(fg='#000000')
+            
+            # Focus after window is fully loaded
+            chat_window.after(100, focus_input)
+            
+        except Exception as e:
+            self.logger.error(f"Error creating advanced chat interface: {e}")
+            # Fallback to simple dialog
             question = simpledialog.askstring(
-                "Ask Pixie",
-                "What would you like to ask me? 🐾",
+                "Pixie's Workshop (Simple)",
+                "Cardboard workshop unavailable. What would you like to craft? �",
                 parent=self.root
             )
             
             if question:
                 response = await self._enhanced_chat_response(question)
-                await self._show_speech_bubble(f"You asked: {question}\n\n{response}", duration=6000)
-                
+                await self._show_speech_bubble(f"Q: {question}\n\nA: {response[:200]}...", duration=6000)
+    
+    async def _get_current_technical_context(self) -> Dict:
+        """Get comprehensive technical context"""
+        context = {}
+        
+        try:
+            # System information
+            import platform
+            import psutil
+            
+            context['system'] = f"{platform.system()} {platform.release()}"
+            context['python_version'] = platform.python_version()
+            
+            # Resource usage
+            context['memory_usage'] = f"{psutil.virtual_memory().percent:.1f}%"
+            context['cpu_usage'] = f"{psutil.cpu_percent():.1f}%"
+            
+            # Active application
+            screen_context = self.screen_monitor.get_screen_context() if self.screen_monitor else {}
+            context['active_app'] = screen_context.get('active_app', 'Unknown')
+            
+            # VS Code integration
+            if self.vscode_integration:
+                try:
+                    vscode_info = await self.vscode_integration.get_workspace_info()
+                    context.update(vscode_info)
+                except:
+                    context['vscode_status'] = 'Not connected'
+            
+            # Recent activity
+            context['current_task'] = self.activity_tracker.get('last_activity', 'Unknown')
+            context['mood'] = self.current_mood
+            
         except Exception as e:
-            self.logger.error(f"Error in ask Pixie: {e}")
-            await self._show_speech_bubble("I'm having trouble understanding right now! 😸", duration=3000)
+            self.logger.warning(f"Error getting technical context: {e}")
+            context['error'] = 'Context gathering failed'
+        
+        return context
+    
+    def _add_technical_message(self, chat_display, sender: str, message: str):
+        """Add message to technical chat with formatting"""
+        try:
+            chat_display.config(state='normal')
+            
+            # Add timestamp
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+            
+            # Add sender and message
+            if sender == 'user':
+                chat_display.insert('end', f"[{timestamp}] You: ", 'user')
+            else:
+                chat_display.insert('end', f"[{timestamp}] Pixie: ", 'assistant')
+            
+            # Add message with code highlighting
+            lines = message.split('\n')
+            for line in lines:
+                if line.strip().startswith('```') or '`' in line:
+                    chat_display.insert('end', line + '\n', 'code')
+                elif 'error' in line.lower() or 'failed' in line.lower():
+                    chat_display.insert('end', line + '\n', 'error')
+                elif 'success' in line.lower() or 'completed' in line.lower():
+                    chat_display.insert('end', line + '\n', 'success')
+                else:
+                    chat_display.insert('end', line + '\n')
+            
+            chat_display.insert('end', '\n')
+            chat_display.config(state='disabled')
+            chat_display.see('end')
+            
+        except Exception as e:
+            self.logger.error(f"Error adding technical message: {e}")
+    
+    async def _process_technical_query(self, query: str, chat_display, context: Dict):
+        """Process technical query with enhanced AI analysis"""
+        try:
+            # Add user message
+            self._add_technical_message(chat_display, 'user', query)
+            
+            # Show processing indicator
+            self._add_technical_message(chat_display, 'assistant', '🤖 Processing technical query...')
+            
+            # Enhanced query processing with context
+            if not self.gemini_client:
+                response = "AI client unavailable. Please configure Gemini API key."
+            else:
+                # Add technical context to query
+                enhanced_query = f"""Technical Context:
+{context}
+
+User Query: {query}
+
+Please provide a technical response with:
+1. Direct answer
+2. Code examples (if applicable)
+3. Best practices
+4. Potential issues to watch for"""
+                
+                response = await self.gemini_client.chat_response(
+                    message=enhanced_query,
+                    context=context
+                )
+            
+            # Add AI response
+            self._add_technical_message(chat_display, 'assistant', response)
+            
+            # Add to conversation history
+            self._add_to_conversation_history("User", query)
+            self._add_to_conversation_history("Pixie", response)
+            
+        except Exception as e:
+            self.logger.error(f"Error processing technical query: {e}")
+            self._add_technical_message(chat_display, 'assistant', 
+                                      f"❌ Error processing query: {str(e)}")
+    
+    async def _quick_analyze_context(self, chat_display):
+        """Quick context analysis"""
+        context = await self._get_current_technical_context()
+        analysis = f"""🔍 CONTEXT ANALYSIS:
+
+System: {context.get('system', 'Unknown')}
+Memory: {context.get('memory_usage', 'Unknown')}
+CPU: {context.get('cpu_usage', 'Unknown')}
+Active App: {context.get('active_app', 'Unknown')}
+Current Task: {context.get('current_task', 'Unknown')}
+
+Recommendations:
+• Monitor resource usage
+• Optimize current workflow
+• Save work frequently"""
+        
+        self._add_technical_message(chat_display, 'assistant', analysis)
+    
+    async def _quick_debug_help(self, chat_display):
+        """Quick debugging assistance"""
+        debug_help = """🔧 DEBUG ASSISTANCE:
+
+1. Check console/terminal for error messages
+2. Verify file paths and permissions
+3. Test with minimal input
+4. Add logging/print statements
+5. Check network connectivity (if applicable)
+
+Common debugging commands:
+• Python: python -m pdb script.py
+• Node.js: node --inspect script.js
+• Browser: F12 Developer Tools
+• VS Code: Set breakpoints (F9)"""
+        
+        self._add_technical_message(chat_display, 'assistant', debug_help)
+    
+    async def _quick_code_examples(self, chat_display):
+        """Show quick code examples"""
+        examples = """📚 CODE EXAMPLES:
+
+Python Error Handling:
+```python
+try:
+    result = risky_operation()
+except SpecificError as e:
+    logger.error(f"Operation failed: {e}")
+    return None
+```
+
+JavaScript Async/Await:
+```javascript
+async function fetchData() {
+    try {
+        const response = await fetch('/api/data');
+        return await response.json();
+    } catch (error) {
+        console.error('Fetch failed:', error);
+    }
+}
+```
+
+Need specific examples? Ask me!"""
+        
+        self._add_technical_message(chat_display, 'assistant', examples)
+    
+    async def _quick_performance_tips(self, chat_display):
+        """Show performance optimization tips"""
+        tips = """🚀 PERFORMANCE TIPS:
+
+General:
+• Profile before optimizing
+• Cache frequently used data
+• Minimize I/O operations
+• Use appropriate data structures
+
+Python Specific:
+• Use list comprehensions
+• Avoid global variables
+• Use generators for large datasets
+• Profile with cProfile
+
+JavaScript Specific:
+• Debounce event handlers
+• Use requestAnimationFrame
+• Minimize DOM manipulation
+• Lazy load resources
+
+Database:
+• Add proper indexes
+• Optimize queries
+• Use connection pooling"""
+        
+        self._add_technical_message(chat_display, 'assistant', tips)
     
     async def _ask_pixie_voice(self):
         """Use voice input to ask Pixie a question"""
@@ -2434,3 +3424,180 @@ Need help? Ask Pixie! 🐾"""
                 self.logger.info(f"Auto-logged coding activity: {file_name}")
             except Exception as e:
                 self.logger.error(f"Failed to auto-log activity: {e}")
+    
+    # Pet Switching Methods
+    
+    async def _change_pet(self, pet_type):
+        """Change the current pet to a different one"""
+        try:
+            # Get available pets from settings
+            available_pets = self.settings.get('pet', {}).get('available_pets', {})
+            
+            if pet_type not in available_pets:
+                await self._show_speech_bubble(f"❌ Pet type '{pet_type}' not available!")
+                return
+            
+            # Don't change if it's already the current pet
+            current_pet = self.settings.get('pet', {}).get('current_pet', 'ghost')
+            if current_pet == pet_type:
+                pet_name = available_pets[pet_type].get('name', pet_type.title())
+                await self._show_speech_bubble(f"✨ I'm already {pet_name}! 😊")
+                return
+            
+            # Update current pet in settings
+            pet_config = available_pets[pet_type]
+            self.settings['pet']['current_pet'] = pet_type
+            
+            # Save settings
+            from src.utils.config_manager import ConfigManager
+            config_manager = ConfigManager()
+            config_manager.save_config(self.config)
+            
+            # Reload settings to ensure consistency
+            self.config = config_manager.load_config()
+            self.settings = self.config
+            
+            # Update pet image
+            await self._update_pet_image(pet_config)
+            
+            # Show confirmation with pet's personality
+            pet_name = pet_config.get('name', pet_type.title())
+            personality = pet_config.get('personality', 'helpful')
+            await self._show_speech_bubble(f"✨ I'm now {pet_name}! I'm {personality} 🎭")
+            
+            # Log the change
+            if self.csv_logger:
+                self.csv_logger.log_activity(
+                    "Pet Change", 
+                    f"Changed to {pet_name} ({pet_type})", 
+                    0, 
+                    "Settings", 
+                    f"Now {personality}"
+                )
+            
+            self.logger.info(f"Pet changed to {pet_type} ({pet_name})")
+            
+        except Exception as e:
+            self.logger.error(f"Error changing pet: {e}")
+            await self._show_speech_bubble("❌ Failed to change pet!")
+    
+    async def _update_pet_image(self, pet_config):
+        """Update the pet's visual appearance"""
+        try:
+            import os
+            from PIL import Image, ImageTk
+            
+            # Get image path
+            image_path = pet_config.get('image', 'react-app/public/ghost.png')
+            
+            # Check if image exists
+            if not os.path.exists(image_path):
+                self.logger.warning(f"Pet image not found: {image_path}")
+                # Try to use default ghost image
+                image_path = 'react-app/public/ghost.png'
+                if not os.path.exists(image_path):
+                    return
+            
+            # Load and resize image
+            pil_image = Image.open(image_path)
+            pet_size = self.settings.get('pet', {}).get('size', {'width': 270, 'height': 270})
+            
+            # Resize maintaining aspect ratio
+            pil_image = pil_image.resize(
+                (pet_size['width'], pet_size['height']), 
+                Image.Resampling.LANCZOS
+            )
+            
+            # Convert to PhotoImage
+            self.pet_image = ImageTk.PhotoImage(pil_image)
+            
+            # Update the pet image display
+            image_updated = False
+            
+            # Check if using ModernPetWidget first (preferred method)
+            if hasattr(self, 'pet_widget') and self.pet_widget and hasattr(self.pet_widget, 'update_pet_image'):
+                try:
+                    success = self.pet_widget.update_pet_image(image_path)
+                    if success:
+                        image_updated = True
+                        self.logger.info(f"Updated ModernPetWidget image: {image_path}")
+                    else:
+                        self.logger.warning(f"ModernPetWidget failed to update image: {image_path}")
+                except Exception as e:
+                    self.logger.error(f"Error updating ModernPetWidget image: {e}")
+            
+            # Fallback to manual canvas update if ModernPetWidget failed or not available
+            if not image_updated:
+                canvas_to_update = None
+                
+                # Check available canvas options
+                if hasattr(self, 'pet_widget') and self.pet_widget and hasattr(self.pet_widget, 'canvas'):
+                    canvas_to_update = self.pet_widget.canvas
+                elif hasattr(self, 'canvas') and self.canvas:
+                    canvas_to_update = self.canvas
+                elif hasattr(self, 'pet_canvas') and self.pet_canvas:
+                    canvas_to_update = self.pet_canvas
+                
+                if canvas_to_update and hasattr(self, 'root') and self.root:
+                    # Clear canvas
+                    canvas_to_update.delete("all")
+                    
+                    # Get canvas dimensions
+                    try:
+                        canvas_width = canvas_to_update.winfo_width() or pet_size['width']
+                        canvas_height = canvas_to_update.winfo_height() or pet_size['height']
+                    except:
+                        canvas_width = pet_size['width']
+                        canvas_height = pet_size['height']
+                    
+                    # Add new image
+                    canvas_to_update.create_image(
+                        canvas_width // 2, 
+                        canvas_height // 2, 
+                        image=self.pet_image, 
+                        anchor="center",
+                        tags="pet"
+                    )
+                    
+                    # Update canvas background to transparent
+                    try:
+                        canvas_to_update.configure(bg='', highlightthickness=0)
+                    except:
+                        pass
+                    
+                    image_updated = True
+                    self.logger.info(f"Updated canvas image manually: {image_path}")
+            
+            if not image_updated:
+                self.logger.warning("Failed to update pet image - no suitable display method found")
+                
+            # Force a display update
+            if hasattr(self, 'root') and self.root:
+                self.root.update_idletasks()
+                
+            self.logger.info(f"Updated pet image: {image_path}")
+            
+        except Exception as e:
+            self.logger.error(f"Error updating pet image: {e}")
+            # Print full error for debugging
+            import traceback
+            self.logger.error(f"Full error traceback: {traceback.format_exc()}")
+    
+    def _get_current_pet_info(self):
+        """Get information about the current pet"""
+        try:
+            current_pet_type = self.settings.get('pet', {}).get('current_pet', 'ghost')
+            available_pets = self.settings.get('pet', {}).get('available_pets', {})
+            
+            if current_pet_type in available_pets:
+                return available_pets[current_pet_type]
+            else:
+                # Return default ghost pet
+                return {
+                    'name': 'Ghost Pixie',
+                    'image': 'react-app/public/ghost.png',
+                    'personality': 'mysterious and helpful'
+                }
+        except Exception as e:
+            self.logger.error(f"Error getting current pet info: {e}")
+            return {'name': 'Pixie', 'image': 'react-app/public/ghost.png', 'personality': 'helpful'}

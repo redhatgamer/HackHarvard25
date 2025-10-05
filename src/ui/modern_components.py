@@ -126,14 +126,30 @@ class ModernPetWidget:
         self._add_particle_effects(center_x, center_y, radius)
     
     def _try_load_custom_image(self):
-        """Try to load custom pet image (like Hirono)"""
+        """Try to load current pet image from configuration"""
         try:
             import os
             from pathlib import Path
             
-            # Check multiple possible image paths
+            # First, try to get current pet image from config
+            current_pet_image = getattr(self, '_current_pet_image', None)
+            
+            if current_pet_image and os.path.exists(current_pet_image):
+                self.pet_image = Image.open(current_pet_image)
+                # Resize to fit current canvas size while maintaining aspect ratio
+                image_size = int(min(self.current_width, self.current_height) * 0.85 * self.hover_scale)
+                self.pet_image = self.pet_image.resize(
+                    (image_size, image_size), 
+                    Image.Resampling.LANCZOS
+                )
+                self.pet_photo = ImageTk.PhotoImage(self.pet_image)
+                self.use_custom_image = True
+                return True
+            
+            # Fallback to hardcoded paths for backwards compatibility
             possible_paths = [
                 "assets/pet/hirono.png",
+                "assets/pet/ghost.png",  # Default fallback
                 "assets/pet/hirono.jpg", 
                 "assets/pet/hirono.jpeg",
                 "assets/pet/hirono.gif",
@@ -160,11 +176,31 @@ class ModernPetWidget:
             return False
             
         except Exception as e:
-            print(f"Could not load custom pet image: {e}")
+            print(f"Could not load pet image: {e}")
+            return False
+    
+    def update_pet_image(self, image_path):
+        """Update the pet image dynamically for pet switching"""
+        try:
+            import os
+            if os.path.exists(image_path):
+                self._current_pet_image = image_path
+                # Force reload of the image
+                self.use_custom_image = False
+                self.pet_image = None
+                self.pet_photo = None
+                # Recreate graphics with new image
+                self._create_pet_graphics()
+                return True
+            else:
+                print(f"Pet image not found: {image_path}")
+                return False
+        except Exception as e:
+            print(f"Error updating pet image: {e}")
             return False
     
     def _draw_custom_image(self, center_x, center_y):
-        """Draw the custom pet image (like Hirono)"""
+        """Draw the custom pet image"""
         if self.pet_photo:
             # Add subtle glow effect around custom image (optional, can be disabled)
             glow_enabled = self.config.get('glow_effect', True)
@@ -1192,6 +1228,196 @@ class ModernContextMenu:
     
     def hide(self):
         """Hide menu"""
+        if self.menu_window:
+            self.menu_window.destroy()
+            self.menu_window = None
+
+
+class CardboardContextMenu:
+    """Cardboard-themed context menu with rustic styling"""
+    
+    def __init__(self, parent):
+        self.parent = parent
+        self.menu_window = None
+        
+        # Cardboard color palette
+        self.cardboard_colors = {
+            'surface': '#D2B48C',      # Tan/cardboard
+            'surface_dark': '#C19A6B',  # Darker tan
+            'border': '#8B4513',        # Saddle brown
+            'text': '#5D4037',          # Dark brown
+            'text_light': '#795548',    # Medium brown
+            'separator': '#A0522D',     # Sienna
+            'hover': '#DEB887'          # Burlywood
+        }
+        
+    def show(self, x: int, y: int, options: list):
+        """Show cardboard-themed context menu at position"""
+        if self.menu_window:
+            self.menu_window.destroy()
+        
+        self.menu_window = tk.Toplevel(self.parent)
+        self.menu_window.overrideredirect(True)
+        self.menu_window.wm_attributes("-topmost", True)
+        self.menu_window.wm_attributes("-alpha", 0.95)
+        
+        # Position menu slightly offset for cardboard effect
+        self.menu_window.geometry(f"+{x+2}+{y+2}")
+        
+        # Create main frame with cardboard styling
+        main_frame = tk.Frame(
+            self.menu_window,
+            bg=self.cardboard_colors['surface'],
+            relief='raised',
+            bd=3,
+            highlightthickness=2,
+            highlightcolor=self.cardboard_colors['border']
+        )
+        main_frame.pack(fill='both', expand=True)
+        
+        # Add a subtle inner border for depth
+        inner_frame = tk.Frame(
+            main_frame,
+            bg=self.cardboard_colors['surface'],
+            relief='sunken',
+            bd=1
+        )
+        inner_frame.pack(fill='both', expand=True, padx=2, pady=2)
+        
+        # Add cardboard texture effect
+        self._add_cardboard_texture(inner_frame)
+        
+        # Add menu options with cardboard styling
+        for option in options:
+            if option == "---":  # Separator
+                separator_frame = tk.Frame(
+                    inner_frame, 
+                    height=3, 
+                    bg=self.cardboard_colors['separator'],
+                    relief='sunken',
+                    bd=1
+                )
+                separator_frame.pack(fill='x', padx=8, pady=3)
+            elif isinstance(option, tuple) and len(option) == 2:
+                label, command = option
+                self._create_cardboard_button(inner_frame, label, command)
+        
+        # Auto-hide on focus lost
+        self.menu_window.bind("<FocusOut>", lambda e: self.hide())
+        self.menu_window.focus_set()
+        
+        # Subtle fade in with cardboard feel
+        self._animate_cardboard_entrance()
+    
+    def _add_cardboard_texture(self, frame):
+        """Add subtle cardboard texture using canvas"""
+        try:
+            texture_canvas = tk.Canvas(
+                frame,
+                height=5,
+                bg=self.cardboard_colors['surface'],
+                highlightthickness=0,
+                bd=0
+            )
+            texture_canvas.pack(fill='x', side='top')
+            
+            # Create subtle texture lines
+            width = 200  # Approximate menu width
+            for i in range(0, width, 8):
+                texture_canvas.create_line(
+                    i, 1, i+4, 3,
+                    fill=self.cardboard_colors['surface_dark'],
+                    width=1
+                )
+        except:
+            pass  # Fallback gracefully if texture fails
+    
+    def _create_cardboard_button(self, parent, label, command):
+        """Create a cardboard-styled menu button"""
+        # Container frame for button effect
+        btn_frame = tk.Frame(
+            parent,
+            bg=self.cardboard_colors['surface'],
+            relief='flat',
+            bd=0
+        )
+        btn_frame.pack(fill='x', padx=4, pady=1)
+        
+        # Actual button with cardboard styling
+        btn = tk.Button(
+            btn_frame,
+            text=label,
+            font=('Courier New', 10, 'bold'),  # Typewriter font for rustic feel
+            bg=self.cardboard_colors['surface'],
+            fg=self.cardboard_colors['text'],
+            bd=0,
+            padx=15,
+            pady=6,
+            relief='flat',
+            anchor='w',
+            cursor='hand2',
+            activebackground=self.cardboard_colors['hover'],
+            activeforeground=self.cardboard_colors['text'],
+            command=lambda cmd=command: self._execute_command(cmd)
+        )
+        btn.pack(fill='x')
+        
+        # Cardboard hover effects
+        def on_enter(e, button=btn, frame=btn_frame):
+            button.configure(
+                bg=self.cardboard_colors['hover'],
+                relief='raised',
+                bd=1
+            )
+            frame.configure(relief='raised', bd=1)
+        
+        def on_leave(e, button=btn, frame=btn_frame):
+            button.configure(
+                bg=self.cardboard_colors['surface'],
+                relief='flat',
+                bd=0
+            )
+            frame.configure(relief='flat', bd=0)
+        
+        btn.bind("<Enter>", on_enter)
+        btn.bind("<Leave>", on_leave)
+    
+    def _execute_command(self, command):
+        """Execute command and hide menu"""
+        self.hide()
+        if callable(command):
+            command()
+    
+    def _animate_cardboard_entrance(self):
+        """Animate entrance with cardboard-like effect"""
+        self.menu_window.wm_attributes("-alpha", 0.0)
+        
+        def entrance_step(alpha=0.0, step=0):
+            if alpha < 0.95:
+                alpha += 0.15
+                # Slight wobble effect for cardboard feel
+                wobble = 1 if step % 4 < 2 else -1
+                current_geo = self.menu_window.geometry()
+                if '+' in current_geo:
+                    parts = current_geo.split('+')
+                    x, y = int(parts[1]), int(parts[2])
+                    if step < 8:  # Only wobble for first few frames
+                        self.menu_window.geometry(f"+{x + wobble}+{y}")
+                
+                self.menu_window.wm_attributes("-alpha", alpha)
+                self.menu_window.after(30, lambda: entrance_step(alpha, step + 1))
+        
+        entrance_step()
+    
+    def hide(self):
+        """Hide menu with cardboard effect"""
+        if self.menu_window:
+            # Quick fade out
+            self.menu_window.wm_attributes("-alpha", 0.5)
+            self.menu_window.after(50, self._destroy_menu)
+    
+    def _destroy_menu(self):
+        """Destroy menu window"""
         if self.menu_window:
             self.menu_window.destroy()
             self.menu_window = None
