@@ -34,9 +34,9 @@ class GeminiClient:
     def _initialize_model(self):
         """Initialize the Gemini model"""
         try:
-            # Use Gemini 2.0 Flash for fast responses with vision capabilities
+            # Use Gemini 2.0 Flash (your available model)
             self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
-            self.logger.info("Gemini model initialized successfully")
+            self.logger.info("Gemini 2.0 Flash model initialized successfully")
         except Exception as e:
             self.logger.error(f"Failed to initialize Gemini model: {e}")
             raise
@@ -144,7 +144,29 @@ Key guidelines:
             self.logger.error(f"Error generating Gemini response: {e}")
             raise
     
-    async def chat_response(self, message: str, context: Dict[str, Any] = None) -> str:
+    def _get_fallback_response(self, message: str) -> str:
+        """Provide helpful fallback responses when API is unavailable"""
+        message_lower = message.lower()
+        
+        # Common programming help
+        if any(word in message_lower for word in ['python', 'code', 'function', 'debug']):
+            return "📚 I'd love to help with coding! Right now I'm over my daily chat limit, but here are some quick tips: \n• Check for typos and indentation\n• Use print() statements for debugging\n• Break complex problems into smaller parts\n• Try Stack Overflow or Python docs for specific issues!"
+        
+        elif any(word in message_lower for word in ['hello', 'hi', 'hey']):
+            return "👋 Hello! I'm Pixie, your coding companion! Unfortunately, I've reached my daily AI chat limit, but I'm still here as your desktop pet. Tomorrow my chat will reset! 🦎✨"
+        
+        elif any(word in message_lower for word in ['help', 'what', 'how']):
+            return "🤖 I'm here to help! I've hit my daily AI limit, but I can still: \n📦 Be your desktop companion\n⏰ Show the time (if you switch to clock mode)\n👻 Keep you company as a ghost\n🦎 Tomorrow my AI chat resets!"
+        
+        elif any(word in message_lower for word in ['time', 'clock', 'date']):
+            from datetime import datetime
+            now = datetime.now()
+            return f"🕐 Current time: {now.strftime('%I:%M %p')}\n📅 Date: {now.strftime('%B %d, %Y')}\n\n(I've reached my AI chat limit, but I can still tell time!) ⏰"
+        
+        else:
+            return "🦎 I've reached my daily AI chat limit! But I'm still here as your desktop companion. My AI chat will reset tomorrow. Until then, I can: \n• Keep you company on your desktop\n• Switch between different pet forms\n• Show the current time\n\nSee you tomorrow for full AI chat! 📦✨"
+    
+    async def chat_response(self, message: str, context: Dict[str, Any] = None, **kwargs) -> str:
         """
         Generate a chat response without screen analysis
         
@@ -176,7 +198,14 @@ User message: {message}
                 
         except Exception as e:
             self.logger.error(f"Error generating chat response: {e}")
-            return "I'm having trouble understanding right now. Could you try asking again? 🐱"
+            if "429" in str(e) or "quota" in str(e).lower():
+                return self._get_fallback_response(message)
+            elif "404" in str(e) or "not found" in str(e).lower():
+                return "🔧 There's an issue with my AI model configuration. Please check the Gemini API setup. 🛠️"
+            elif "timeout" in str(e).lower():
+                return "⏱️ I'm thinking too slowly! Could you try asking again? 🐾"
+            else:
+                return self._get_fallback_response(message)
     
     async def generate_code(self, request: str, language: str = "python", context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
@@ -646,7 +675,7 @@ Analyze the screenshot and decide whether to comment:"""
             return None
     
     async def conversational_response(self, message: str, conversation_history: List[Dict] = None, 
-                                    context: Dict[str, Any] = None, personality_traits: List[str] = None) -> str:
+                                    context: Dict[str, Any] = None, personality_traits: List[str] = None, **kwargs) -> str:
         """
         Generate more natural, conversational responses with personality and context
         
@@ -708,7 +737,14 @@ Analyze the screenshot and decide whether to comment:"""
                 
         except Exception as e:
             self.logger.error(f"Error generating conversational response: {e}")
-            return "Sorry, I'm having trouble thinking right now. Could you try again? 😸"
+            if "429" in str(e) or "quota" in str(e).lower():
+                return self._get_fallback_response(message)
+            elif "404" in str(e) or "not found" in str(e).lower():
+                return "🔧 There's an issue with my AI model configuration. Please check the Gemini API setup. 🛠️"
+            elif "timeout" in str(e).lower():
+                return "⏱️ I'm thinking too slowly! Could you try asking again? 🐾"
+            else:
+                return self._get_fallback_response(message)
     
     async def react_to_activity(self, activity_type: str, activity_details: Dict[str, Any] = None) -> str:
         """

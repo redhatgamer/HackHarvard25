@@ -569,12 +569,18 @@ class ModernSpeechBubble:
         # Start position tracking to follow the pet
         self._start_position_tracking()
         
-        # Auto-hide after duration (or stay longer for long messages)
+        # Auto-hide after duration (smart timing for message length)
         if self.auto_hide_timer:
             self.parent.after_cancel(self.auto_hide_timer)
-        # For very long messages, make them stay until clicked
-        if len(message) > 150:
-            duration = duration * 2  # Double the time for long messages
+        
+        # Adaptive timing based on message complexity
+        if len(message) > 200:
+            duration = duration * 3  # Much longer for very long messages
+        elif len(message) > 100:
+            duration = duration * 2  # Longer for long messages
+        elif len(message) > 50:
+            duration = int(duration * 1.5)  # Slightly longer for medium messages
+        
         self.auto_hide_timer = self.parent.after(duration, self.hide)
     
     def hide(self):
@@ -626,23 +632,53 @@ class ModernSpeechBubble:
         self._draw_bubble_background()
 
     def _calculate_bubble_size(self):
-        """Calculate appropriate bubble size based on message length"""
-        # Estimate text dimensions (rough calculation)
-        char_width = 8  # Average character width in pixels
-        line_height = 16  # Line height in pixels
-        padding = 40  # Padding around text
+        """Calculate appropriate bubble size based on message length with better text wrapping"""
+        # Better font metrics
+        char_width = 7  # More accurate character width
+        line_height = 18  # Better line spacing
+        padding = 50  # More padding for readability
         
-        # Calculate lines needed (assuming max line width)
-        max_chars_per_line = 35  # Reasonable max characters per line
-        lines_needed = max(1, (len(self.current_message) + max_chars_per_line - 1) // max_chars_per_line)
+        # Adaptive max width based on message length
+        if len(self.current_message) < 50:
+            max_chars_per_line = 25  # Shorter lines for short messages
+        elif len(self.current_message) < 150:
+            max_chars_per_line = 40  # Medium width for medium messages
+        else:
+            max_chars_per_line = 50  # Wider for long messages
         
-        # Calculate dimensions
-        text_width = min(len(self.current_message) * char_width, max_chars_per_line * char_width)
+        # Smart line breaking - respect word boundaries
+        words = self.current_message.split(' ')
+        lines = []
+        current_line = ""
+        
+        for word in words:
+            # If adding this word would exceed line length
+            if len(current_line + ' ' + word) > max_chars_per_line and current_line:
+                lines.append(current_line)
+                current_line = word
+            else:
+                if current_line:
+                    current_line += ' ' + word
+                else:
+                    current_line = word
+        
+        # Add the last line
+        if current_line:
+            lines.append(current_line)
+        
+        # Calculate actual dimensions
+        lines_needed = len(lines)
+        max_line_length = max(len(line) for line in lines) if lines else 1
+        
+        text_width = max_line_length * char_width
         text_height = lines_needed * line_height
         
-        # Set bubble dimensions with limits
-        self.bubble_width = max(200, min(500, text_width + padding))
-        self.bubble_height = max(80, min(300, text_height + padding + 30))  # +30 for tail
+        # Set bubble dimensions with better limits
+        self.bubble_width = max(150, min(600, text_width + padding))
+        self.bubble_height = max(60, min(400, text_height + padding + 35))  # +35 for tail
+        
+        # Store wrapped lines for better text rendering
+        self.wrapped_lines = lines
     
     def _draw_bubble_background(self):
         """Draw the speech bubble background with modern styling"""
@@ -682,19 +718,34 @@ class ModernSpeechBubble:
         ]
         self.canvas.create_polygon(tail_points, fill=surface_color, outline=border_color, width=2)
         
-        # Create text area with dynamic sizing
+        # Create text area with better sizing and alignment
         self.text_id = self.canvas.create_text(
-            bubble_x + bubble_width // 2, bubble_y + bubble_height // 2 - 5,
+            bubble_x + 15, bubble_y + 15,  # Left-aligned for better readability
             text="", font=("Segoe UI", 10), fill=text_color,
-            width=bubble_width - 20, justify='left', anchor='center'
+            width=bubble_width - 30, justify='left', anchor='nw'  # Top-left anchor
         )
         
-        # Add a subtle close hint for long messages
-        if len(self.current_message) > 100:
+        # Add helpful indicators for long messages
+        if len(self.current_message) > 80:
+            # Close button
+            close_btn_bg = self.canvas.create_oval(
+                bubble_x + bubble_width - 20, bubble_y + 5,
+                bubble_x + bubble_width - 5, bubble_y + 20,
+                fill='#ff6b6b', outline='#ff5252', width=1
+            )
             self.canvas.create_text(
-                bubble_x + bubble_width - 15, bubble_y + 8,
-                text="✕", font=("Segoe UI", 8), fill=text_color,
+                bubble_x + bubble_width - 12, bubble_y + 12,
+                text="✕", font=("Segoe UI", 8, 'bold'), fill='white',
                 anchor='center'
+            )
+            
+        # Add reading time estimate for very long messages
+        if len(self.current_message) > 150:
+            read_time = max(1, len(self.current_message) // 100)  # Rough reading time
+            self.canvas.create_text(
+                bubble_x + bubble_width - 40, bubble_y + bubble_height - 10,
+                text=f"📖 ~{read_time}min", font=("Segoe UI", 7), 
+                fill=text_color, anchor='center'
             )
     
     def _create_rounded_rectangle(self, x1, y1, x2, y2, radius, **kwargs):
@@ -728,7 +779,7 @@ class ModernSpeechBubble:
         return self.canvas.create_polygon(points, smooth=True, **kwargs)
     
     def _position_bubble(self):
-        """Position the bubble relative to the pet"""
+        """Position the bubble relative to the pet with smart positioning"""
         if not self.bubble_window:
             return
             
@@ -736,21 +787,30 @@ class ModernSpeechBubble:
         pet_x = self.parent.winfo_x()
         pet_y = self.parent.winfo_y()
         
-        # Position bubble to the right and slightly above the pet
-        bubble_x = pet_x + self.pet_size[0] + 10
-        bubble_y = pet_y - 30
-        
-        # Make sure bubble stays on screen
+        # Get screen dimensions
         screen_width = self.parent.winfo_screenwidth()
         screen_height = self.parent.winfo_screenheight()
         
-        # Adjust if bubble would go off-screen (using dynamic dimensions)
-        if bubble_x + self.bubble_width > screen_width:
-            bubble_x = pet_x - self.bubble_width - 10  # Position to the left instead
-        if bubble_y < 0:
-            bubble_y = pet_y + 20
-        if bubble_y + self.bubble_height > screen_height:
-            bubble_y = screen_height - self.bubble_height - 20
+        # Smart positioning - try different positions based on available space
+        positions = [
+            (pet_x + self.pet_size[0] + 15, pet_y - 20),  # Right of pet
+            (pet_x - self.bubble_width - 15, pet_y - 20),  # Left of pet
+            (pet_x + 10, pet_y + self.pet_size[1] + 15),   # Below pet
+            (pet_x + 10, pet_y - self.bubble_height - 15), # Above pet
+        ]
+        
+        # Find the best position that fits on screen
+        bubble_x, bubble_y = positions[0]  # Default to right
+        
+        for pos_x, pos_y in positions:
+            if (pos_x >= 0 and pos_x + self.bubble_width <= screen_width and
+                pos_y >= 0 and pos_y + self.bubble_height <= screen_height):
+                bubble_x, bubble_y = pos_x, pos_y
+                break
+        
+        # Final safety check - keep on screen
+        bubble_x = max(10, min(bubble_x, screen_width - self.bubble_width - 10))
+        bubble_y = max(10, min(bubble_y, screen_height - self.bubble_height - 10))
         
         self.bubble_window.geometry(f"{self.bubble_width}x{self.bubble_height}+{bubble_x}+{bubble_y}")
     
@@ -775,13 +835,14 @@ class ModernSpeechBubble:
             self.parent.after(100, lambda: self._update_bubble_content())
     
     def _update_bubble_content(self):
-        """Update the bubble text content"""
+        """Update the bubble text content with proper formatting"""
         if self.bubble_window and self.text_id:
             display_text = self.typed_text
             # Add typing cursor if still typing
             if self.typing_index < len(self.current_message) and len(display_text) > 0:
                 display_text += "|"
             
+            # Use the text as-is since tkinter will handle wrapping with the width parameter
             self.canvas.itemconfig(self.text_id, text=display_text)
     
     def _start_fade_animation(self):

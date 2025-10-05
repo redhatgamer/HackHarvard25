@@ -901,11 +901,11 @@ class PetManager:
         input_container = tk.Frame(self.chat_window, bg='#f8f9fa')
         input_container.pack(fill='x', padx=20, pady=(0, 20))
         
-        input_frame = tk.Frame(input_container, bg='white', relief='flat', bd=1)
-        input_frame.pack(fill='x', pady=(0, 10))
+        input_section = tk.Frame(input_container, bg='white', relief='flat', bd=1)
+        input_section.pack(fill='x', pady=(0, 10))
         
         self.chat_input = tk.Text(
-            input_frame, height=3, wrap='word',
+            input_section, height=3, wrap='word',
             bg='white', fg='#2c3e50', font=('Segoe UI', 10),
             bd=0, padx=15, pady=10, relief='flat'
         )
@@ -2588,16 +2588,12 @@ class PetManager:
             chat_window.attributes('-topmost', True)
             chat_window.after(100, lambda: chat_window.attributes('-topmost', False))
             
-            # Create main cardboard frame with texture
-            main_frame = tk.Frame(chat_window, bg='#D2B48C', relief='raised', bd=3)
-            main_frame.pack(fill='both', expand=True, padx=8, pady=8)
-            
-            # Add cardboard texture border
-            texture_frame = tk.Frame(main_frame, bg='#C19A6B', relief='sunken', bd=2)
-            texture_frame.pack(fill='both', expand=True, padx=3, pady=3)
+            # Simple cardboard main frame
+            main_frame = tk.Frame(chat_window, bg='#D2B48C')
+            main_frame.pack(fill='both', expand=True, padx=10, pady=10)
             
             # Cardboard context panel (top)
-            context_frame = tk.LabelFrame(texture_frame, text="� System Status", 
+            context_frame = tk.LabelFrame(main_frame, text="� System Status", 
                                         bg='#DEB887', fg='#8B4513', font=('Courier New', 10, 'bold'),
                                         relief='raised', bd=2)
             context_frame.pack(fill='x', pady=(5, 10), padx=5)
@@ -2621,7 +2617,7 @@ class PetManager:
             context_text.config(state='disabled')
             
             # Cardboard chat display (middle)
-            chat_frame = tk.LabelFrame(texture_frame, text="� Workshop Conversation", 
+            chat_frame = tk.LabelFrame(main_frame, text="� Workshop Conversation", 
                                      bg='#DEB887', fg='#8B4513', font=('Courier New', 10, 'bold'),
                                      relief='raised', bd=2)
             chat_frame.pack(fill='both', expand=True, pady=(0, 10), padx=5)
@@ -2647,28 +2643,26 @@ class PetManager:
             chat_display.tag_configure('error', foreground='#B22222', font=('Courier New', 10, 'bold'))
             chat_display.tag_configure('success', foreground='#228B22', font=('Courier New', 10, 'bold'))
             
-            # Cardboard input panel (bottom)
-            input_frame = tk.LabelFrame(texture_frame, text="✍️ WRITE YOUR MESSAGE ON CARDBOARD ↓", 
-                                      bg='#DEB887', fg='#8B4513', font=('Courier New', 11, 'bold'),
-                                      relief='raised', bd=3)
-            input_frame.pack(fill='x', pady=(5, 5), padx=5)
+            # Simple input section
+            input_section = tk.Frame(main_frame, bg='#D2B48C')
+            input_section.pack(fill='x', side='bottom')
             
             # Cardboard instruction label
-            instruction_label = tk.Label(input_frame, 
+            instruction_label = tk.Label(input_section, 
                                        text="� Write your workshop question below and press 'Send Message' or Ctrl+Enter",
                                        bg='#DEB887', fg='#A0522D', font=('Courier New', 9, 'bold'))
             instruction_label.pack(pady=(6, 4))
             
-            # Cardboard input area
-            input_text = tk.Text(input_frame, height=4, bg='#FFEFD5', fg='#654321', 
-                               font=('Courier New', 11), wrap='word', relief='sunken', bd=3,
-                               insertbackground='#8B4513', selectbackground='#DEB887')
-            input_text.pack(fill='x', padx=10, pady=(0, 8))
+            # Simple text input
+            # Simple text input
+            input_text = tk.Text(input_section, height=3, bg='#FFEFD5', fg='#654321', 
+                               font=('Courier New', 11), wrap='word')
+            input_text.pack(fill='x', pady=(0, 5))
             
-            # Cardboard placeholder text
-            placeholder_text = "Example: How do I craft better Python code in my workshop?"
+            # Simple placeholder text
+            placeholder_text = "Ask me anything about coding..."
             input_text.insert('1.0', placeholder_text)
-            input_text.configure(fg='#A0522D')  # Brown placeholder text
+            input_text.configure(fg='#A0522D')
             
             # Placeholder text handling
             def on_focus_in(event):
@@ -2685,7 +2679,7 @@ class PetManager:
             input_text.bind('<FocusOut>', on_focus_out)
             
             # Button frame
-            button_frame = tk.Frame(input_frame, bg='#DEB887')
+            button_frame = tk.Frame(input_section, bg='#DEB887')
             button_frame.pack(fill='x', padx=8, pady=6)
             
             # Cardboard quick action buttons
@@ -2696,21 +2690,12 @@ class PetManager:
                 ("⚙️ Speed Tips", lambda: self._quick_performance_tips(chat_display))
             ]
             
-            for i, (text, command) in enumerate(quick_actions):
-                btn = tk.Button(button_frame, text=text, command=command,
-                              bg='#F4A460', fg='#654321', font=('Courier New', 8, 'bold'),
-                              relief='raised', bd=2, padx=8, pady=3, cursor='hand2',
-                              activebackground='#DEB887', activeforeground='#8B4513')
-                btn.pack(side='left', padx=3)
-                
-                # Add cardboard hover effects
-                def on_btn_hover(e, button=btn):
-                    button.configure(relief='raised', bd=3, bg='#DEB887')
-                def on_btn_leave(e, button=btn):
-                    button.configure(relief='raised', bd=2, bg='#F4A460')
-                
-                btn.bind('<Enter>', on_btn_hover)
-                btn.bind('<Leave>', on_btn_leave)
+            # Simple send button
+            send_btn = tk.Button(button_frame, text="📦 Send",
+                               command=lambda: asyncio.create_task(send_technical_message()),
+                               bg='#CD853F', fg='#654321', font=('Courier New', 11, 'bold'),
+                               padx=15, pady=6)
+            send_btn.pack(side='right')
             
             # Enhanced send functionality
             async def send_technical_message():
