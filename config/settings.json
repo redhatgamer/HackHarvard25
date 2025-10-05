@@ -7,8 +7,8 @@
       "height": 270
     },
     "position": {
-      "x": 1073,
-      "y": 529
+      "x": 719,
+      "y": 293
     },
     "animations": {
       "idle": "assets/pet/idle.gif",
@@ -17,7 +17,7 @@
       "enabled": true,
       "fps": 20
     },
-    "current_pet": "ghost",
+    "current_pet": "house",
     "available_pets": {
       "ghost": {
         "name": "Ghost Pixie",
@@ -104,7 +104,7 @@
       "mood_change_probability": 0.4
     },
     "tts": {
-      "enabled": false,
+      "enabled": true,
       "use_natural_voice": true,
       "british_accent": true,
       "voice_type": "natural_british",
@@ -112,7 +112,7 @@
       "fallback_volume": 0.9
     },
     "voice_input": {
-      "enabled": false,
+      "enabled": true,
       "language": "en-US",
       "energy_threshold": 300,
       "pause_threshold": 0.8,
